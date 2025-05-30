@@ -4,6 +4,8 @@ OpenAI/OpenAPI compatible REST API service for KURE (Korea University Retrieval 
 
 ## Features
 
+- **OpenAI Compatible**: Full compatibility with OpenAI embeddings API format and client libraries
+- **Embeddings**: OpenAI-compatible embeddings endpoint for seamless integration
 - **OpenAPI 3.0 Compatible**: Full OpenAPI specification with interactive documentation
 - **Multiple Models**: Support for KURE-v1 and KoE5 models
 - **RESTful API**: Standard REST endpoints for embedding and similarity operations
@@ -45,7 +47,64 @@ python main.py
 
 ## API Endpoints
 
-### Generate Embeddings
+### OpenAI Compatible Embeddings
+```http
+POST /embeddings
+```
+
+**OpenAI-compatible embeddings endpoint** - works seamlessly with OpenAI client libraries.
+
+**Request Body:**
+```json
+{
+  "input": ["안녕하세요", "한국어 임베딩 모델입니다"],
+  "model": "nlpai-lab/KURE-v1",
+  "encoding_format": "float"
+}
+```
+
+**Response (OpenAI Format):**
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [0.1, 0.2, ...],
+      "index": 0
+    }
+  ],
+  "model": "nlpai-lab/KURE-v1",
+  "usage": {
+    "prompt_tokens": 10,
+    "total_tokens": 10
+  }
+}
+```
+
+### Using with OpenAI Client Library
+
+```python
+from openai import OpenAI
+
+# Point OpenAI client to KURE API
+client = OpenAI(
+    base_url="http://localhost:8000",
+    api_key="sk-kure-v1-your-secret-key"
+)
+
+# Generate embeddings using OpenAI client
+response = client.embeddings.create(
+    input=["안녕하세요", "한국어 임베딩 모델입니다"],
+    model="nlpai-lab/KURE-v1"
+)
+
+embeddings = [data.embedding for data in response.data]
+```
+
+### Additional Endpoints
+
+#### Generate Embeddings (Alternative)
 ```http
 POST /embeddings
 ```
