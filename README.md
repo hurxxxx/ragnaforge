@@ -263,16 +263,22 @@ curl -H "Authorization: Bearer sk-kure-v1-your-secret-key" \
 실제 API 테스트 실행:
 ```bash
 # 실제 HTTP 요청으로 테스트
-python test_real_api.py
+python tests/test_real_api.py
 
 # OpenAI 클라이언트 라이브러리로 테스트
-python test_real_openai_client.py
+python tests/test_real_openai_client.py
 
 # 텍스트 청킹 기능 테스트
-python test_chunking.py
+python tests/test_chunking.py
+
+# 샘플 문서 청킹 테스트
+python tests/test_sample_chunking.py
+
+# 새로운 기본값 테스트
+python tests/test_new_defaults.py
 
 # 간단한 테스트 클라이언트
-python scripts/test_client.py
+python tests/test_client.py
 ```
 
 ## 프로덕션 배포
