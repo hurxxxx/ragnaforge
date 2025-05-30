@@ -63,13 +63,14 @@ if command -v conda &> /dev/null; then
     # Create conda environment if it doesn't exist
     if conda env list | grep -q "kure-api"; then
         echo "✅ kure-api environment already exists"
+        echo "🔄 Removing existing environment to ensure clean setup..."
+        conda env remove -n kure-api -y
+        echo "📦 Creating fresh kure-api conda environment..."
+        conda create -n kure-api python=3.11 -y
+        check_success "Conda environment creation"
     else
         echo "📦 Creating kure-api conda environment..."
-        if [[ $ROOT_USER == true ]]; then
-            conda create -n kure-api python=3.11 -y --force-reinstall
-        else
-            conda create -n kure-api python=3.11 -y
-        fi
+        conda create -n kure-api python=3.11 -y
         check_success "Conda environment creation"
     fi
 
