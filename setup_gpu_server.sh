@@ -6,9 +6,11 @@ echo "================================================"
 
 # Check if running as root
 if [[ $EUID -eq 0 ]]; then
-   echo "⚠️  This script should not be run as root for safety"
-   echo "   Please run as regular user with sudo privileges"
-   exit 1
+   echo "⚠️  Running as root detected"
+   echo "   Proceeding with root privileges (use with caution)"
+   ROOT_USER=true
+else
+   ROOT_USER=false
 fi
 
 # Function to check command success
@@ -50,31 +52,46 @@ echo ""
 echo "🔧 Checking Conda environment..."
 if command -v conda &> /dev/null; then
     echo "✅ Conda is available"
-    
+
+    # Initialize conda for root if needed
+    if [[ $ROOT_USER == true ]]; then
+        echo "🔧 Initializing conda for root user..."
+        conda init bash 2>/dev/null || true
+        source ~/.bashrc 2>/dev/null || true
+    fi
+
     # Create conda environment if it doesn't exist
     if conda env list | grep -q "kure-api"; then
         echo "✅ kure-api environment already exists"
     else
         echo "📦 Creating kure-api conda environment..."
-        conda create -n kure-api python=3.11 -y
+        if [[ $ROOT_USER == true ]]; then
+            conda create -n kure-api python=3.11 -y --force-reinstall
+        else
+            conda create -n kure-api python=3.11 -y
+        fi
         check_success "Conda environment creation"
     fi
-    
+
     echo "🔄 Activating kure-api environment..."
     source $(conda info --base)/etc/profile.d/conda.sh
     conda activate kure-api
     check_success "Environment activation"
-    
+
 else
     echo "⚠️  Conda not found. Using system Python with venv..."
-    
+
     # Create virtual environment
     if [ ! -d "venv" ]; then
         echo "📦 Creating virtual environment..."
-        python3 -m venv venv
+        if [[ $ROOT_USER == true ]]; then
+            python3 -m venv venv --system-site-packages
+        else
+            python3 -m venv venv
+        fi
         check_success "Virtual environment creation"
     fi
-    
+
     echo "🔄 Activating virtual environment..."
     source venv/bin/activate
     check_success "Virtual environment activation"
@@ -83,7 +100,11 @@ fi
 # Upgrade pip
 echo ""
 echo "📦 Upgrading pip..."
-pip install --upgrade pip
+if [[ $ROOT_USER == true ]]; then
+    pip install --upgrade pip --break-system-packages 2>/dev/null || pip install --upgrade pip
+else
+    pip install --upgrade pip
+fi
 check_success "Pip upgrade"
 
 # Install PyTorch with CUDA support
@@ -95,25 +116,45 @@ echo "   This may take a few minutes..."
 if command -v nvcc &> /dev/null; then
     cuda_version=$(nvcc --version | grep "release" | sed 's/.*release \([0-9]\+\.[0-9]\+\).*/\1/')
     echo "   Detected CUDA version: $cuda_version"
-    
+
     if [[ "$cuda_version" == "12."* ]]; then
-        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+        if [[ $ROOT_USER == true ]]; then
+            pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --break-system-packages 2>/dev/null || pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+        else
+            pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+        fi
     elif [[ "$cuda_version" == "11."* ]]; then
-        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+        if [[ $ROOT_USER == true ]]; then
+            pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --break-system-packages 2>/dev/null || pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+        else
+            pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+        fi
     else
         echo "⚠️  Unsupported CUDA version, installing CPU version"
-        pip install torch torchvision torchaudio
+        if [[ $ROOT_USER == true ]]; then
+            pip install torch torchvision torchaudio --break-system-packages 2>/dev/null || pip install torch torchvision torchaudio
+        else
+            pip install torch torchvision torchaudio
+        fi
     fi
 else
     echo "⚠️  NVCC not found, installing CPU version"
-    pip install torch torchvision torchaudio
+    if [[ $ROOT_USER == true ]]; then
+        pip install torch torchvision torchaudio --break-system-packages 2>/dev/null || pip install torch torchvision torchaudio
+    else
+        pip install torch torchvision torchaudio
+    fi
 fi
 check_success "PyTorch installation"
 
 # Install other requirements
 echo ""
 echo "📦 Installing other requirements..."
-pip install -r requirements.txt
+if [[ $ROOT_USER == true ]]; then
+    pip install -r requirements.txt --break-system-packages 2>/dev/null || pip install -r requirements.txt
+else
+    pip install -r requirements.txt
+fi
 check_success "Requirements installation"
 
 # Verify PyTorch CUDA
@@ -139,14 +180,14 @@ python3 -c "
 try:
     from sentence_transformers import SentenceTransformer
     import torch
-    
+
     if torch.cuda.is_available():
         print('✅ Testing GPU model loading...')
         # Test with a small model first
         model = SentenceTransformer('all-MiniLM-L6-v2')
         device = torch.device('cuda')
         model = model.to(device)
-        
+
         # Test encoding
         test_text = ['GPU test sentence']
         embeddings = model.encode(test_text, device=device)
@@ -154,7 +195,7 @@ try:
         print('✅ sentence-transformers GPU support verified')
     else:
         print('⚠️  CUDA not available for sentence-transformers')
-        
+
 except Exception as e:
     print(f'❌ sentence-transformers GPU test failed: {e}')
 "
@@ -197,7 +238,7 @@ while true; do
     clear
     echo "🖥️  GPU Monitoring - $(date)"
     echo "=================================="
-    
+
     # GPU utilization
     nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits | \
     while IFS=, read -r name util mem_used mem_total temp; do
@@ -207,14 +248,14 @@ while true; do
         echo "  Temperature: ${temp}°C"
         echo ""
     done
-    
+
     # Process information
     echo "🔄 GPU Processes:"
     nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits | \
     while IFS=, read -r pid name memory; do
         echo "  PID: $pid, Process: $name, Memory: ${memory}MB"
     done
-    
+
     echo ""
     echo "Press Ctrl+C to stop monitoring"
     sleep 2
@@ -234,6 +275,14 @@ cat > run_gpu_test.sh << 'EOF'
 echo "🚀 Running GPU Performance Test"
 echo "==============================="
 
+# Check if running as root
+if [[ $EUID -eq 0 ]]; then
+    echo "⚠️  Running as root - proceeding with caution"
+    ROOT_USER=true
+else
+    ROOT_USER=false
+fi
+
 # Activate environment
 if command -v conda &> /dev/null && conda env list | grep -q "kure-api"; then
     source $(conda info --base)/etc/profile.d/conda.sh
@@ -249,7 +298,7 @@ if ! curl -s http://localhost:8000/health > /dev/null; then
     SERVER_PID=$!
     echo "🔄 Waiting for server to start..."
     sleep 10
-    
+
     # Check again
     if ! curl -s http://localhost:8000/health > /dev/null; then
         echo "❌ Failed to start server"
@@ -285,7 +334,27 @@ echo ""
 echo "🎉 GPU Server Setup Complete!"
 echo "============================="
 echo ""
+
+if [[ $ROOT_USER == true ]]; then
+    echo "⚠️  Root User Notice:"
+    echo "- Running as root completed successfully"
+    echo "- Consider creating a non-root user for production"
+    echo "- Ensure proper file permissions for security"
+    echo ""
+fi
+
 echo "📋 Next Steps:"
+if [[ $ROOT_USER == true ]]; then
+    echo "1. Activate environment:"
+    if command -v conda &> /dev/null; then
+        echo "   source $(conda info --base)/etc/profile.d/conda.sh"
+        echo "   conda activate kure-api"
+    else
+        echo "   source venv/bin/activate"
+    fi
+    echo ""
+fi
+
 echo "1. Start the KURE API server:"
 echo "   python main.py"
 echo ""
@@ -302,6 +371,9 @@ echo "💡 Tips:"
 echo "- Check GPU memory usage with: nvidia-smi"
 echo "- Adjust batch size in .env for optimal performance"
 echo "- Monitor temperature during heavy loads"
+if [[ $ROOT_USER == true ]]; then
+    echo "- Consider running API server as non-root user in production"
+fi
 echo ""
 echo "🔧 Configuration files:"
 echo "- .env: API and GPU settings"
