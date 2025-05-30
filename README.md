@@ -9,41 +9,37 @@ OpenAI/OpenAPI compatible REST API service for KURE (Korea University Retrieval 
 - **OpenAPI 3.0 Compatible**: Full OpenAPI specification with interactive documentation
 - **Multiple Models**: Support for KURE-v1 and KoE5 models
 - **RESTful API**: Standard REST endpoints for embedding and similarity operations
-- **Docker Support**: Containerized deployment with Docker and Docker Compose
 - **Production Ready**: Health checks, logging, error handling, and monitoring
 - **Korean Language Optimized**: Specialized for Korean text processing
 
 ## Quick Start
 
-### Using Docker Compose (Recommended)
-
-1. Clone the repository:
+1. **Clone the repository:**
 ```bash
-git clone <repository-url>
-cd kure-v1-wrapper
+git clone https://github.com/hurxxxx/kure-v1-api-gateway.git
+cd kure-v1-api-gateway
 ```
 
-2. Start the service:
-```bash
-docker-compose up -d
-```
-
-3. Access the API:
-- API Base URL: http://localhost:8000
-- Interactive Docs: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-### Local Development
-
-1. Install dependencies:
+2. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Run the service:
+3. **Configure environment (optional):**
+```bash
+cp .env.example .env
+# Edit .env file to set API_KEY and other settings
+```
+
+4. **Run the service:**
 ```bash
 python main.py
 ```
+
+5. **Access the API:**
+- API Base URL: http://localhost:8000
+- Interactive Docs: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ## API Endpoints
 
@@ -229,15 +225,18 @@ python scripts/test_client.py
 
 ## Production Deployment
 
-### Docker
-```bash
-docker build -t kure-api .
-docker run -p 8000:8000 kure-api
-```
+For production deployment, consider:
 
-### Docker Compose
+1. **Process Management**: Use a process manager like `systemd`, `supervisor`, or `pm2`
+2. **Reverse Proxy**: Use nginx or Apache as a reverse proxy
+3. **Environment Variables**: Set production environment variables
+4. **Logging**: Configure proper logging and log rotation
+5. **Monitoring**: Set up health checks and monitoring
+
+### Example with uvicorn
 ```bash
-docker-compose up -d
+# Production server with multiple workers
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ## API Documentation
