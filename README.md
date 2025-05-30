@@ -1,56 +1,56 @@
 # KURE v1 API Gateway
 
-OpenAI/OpenAPI compatible REST API service for KURE (Korea University Retrieval Embedding) models.
+KURE (Korea University Retrieval Embedding) 모델을 위한 OpenAI/OpenAPI 호환 REST API 서비스입니다.
 
-## Features
+## 주요 기능
 
-- **OpenAI Compatible**: Full compatibility with OpenAI embeddings API format and client libraries
-- **Embeddings**: OpenAI-compatible embeddings endpoint for seamless integration
-- **OpenAPI 3.0 Compatible**: Full OpenAPI specification with interactive documentation
-- **Multiple Models**: Support for KURE-v1 and KoE5 models
-- **RESTful API**: Standard REST endpoints for embedding and similarity operations
-- **Production Ready**: Health checks, logging, error handling, and monitoring
-- **Korean Language Optimized**: Specialized for Korean text processing
+- **OpenAI 호환**: OpenAI 임베딩 API 형식 및 클라이언트 라이브러리와 완전 호환
+- **임베딩 서비스**: 원활한 통합을 위한 OpenAI 호환 임베딩 엔드포인트
+- **OpenAPI 3.0 호환**: 대화형 문서가 포함된 완전한 OpenAPI 사양
+- **다중 모델 지원**: KURE-v1 및 KoE5 모델 지원
+- **RESTful API**: 임베딩 및 유사도 계산을 위한 표준 REST 엔드포인트
+- **프로덕션 준비**: 헬스 체크, 로깅, 오류 처리 및 모니터링
+- **한국어 최적화**: 한국어 텍스트 처리에 특화
 
-## Quick Start
+## 빠른 시작
 
-1. **Clone the repository:**
+1. **저장소 복제:**
 ```bash
 git clone https://github.com/hurxxxx/kure-v1-api-gateway.git
 cd kure-v1-api-gateway
 ```
 
-2. **Install dependencies:**
+2. **의존성 설치:**
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Configure environment (optional):**
+3. **환경 설정 (선택사항):**
 ```bash
 cp .env.example .env
-# Edit .env file to set API_KEY and other settings
+# .env 파일을 편집하여 API_KEY 및 기타 설정을 구성
 ```
 
-4. **Run the service:**
+4. **서비스 실행:**
 ```bash
 python main.py
 ```
 
-5. **Access the API:**
-- API Base URL: http://localhost:8000
-- Interactive Docs: http://localhost:8000/docs
+5. **API 접근:**
+- API 기본 URL: http://localhost:8000
+- 대화형 문서: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-## API Endpoints
+## API 엔드포인트
 
-### OpenAI Compatible Embeddings
+### OpenAI 호환 임베딩
 ```http
 POST /embeddings
 ```
 
-**OpenAI-compatible embeddings endpoint** - works seamlessly with OpenAI client libraries.
+**OpenAI 호환 임베딩 엔드포인트** - OpenAI 클라이언트 라이브러리와 원활하게 작동합니다.
 
-**Request Body:**
+**요청 본문:**
 ```json
 {
   "input": ["안녕하세요", "한국어 임베딩 모델입니다"],
@@ -59,7 +59,7 @@ POST /embeddings
 }
 ```
 
-**Response (OpenAI Format):**
+**응답 (OpenAI 형식):**
 ```json
 {
   "object": "list",
@@ -78,18 +78,18 @@ POST /embeddings
 }
 ```
 
-### Using with OpenAI Client Library
+### OpenAI 클라이언트 라이브러리 사용법
 
 ```python
 from openai import OpenAI
 
-# Point OpenAI client to KURE API
+# OpenAI 클라이언트를 KURE API로 설정
 client = OpenAI(
     base_url="http://localhost:8000",
     api_key="sk-kure-v1-your-secret-key"
 )
 
-# Generate embeddings using OpenAI client
+# OpenAI 클라이언트를 사용하여 임베딩 생성
 response = client.embeddings.create(
     input=["안녕하세요", "한국어 임베딩 모델입니다"],
     model="nlpai-lab/KURE-v1"
@@ -98,16 +98,16 @@ response = client.embeddings.create(
 embeddings = [data.embedding for data in response.data]
 ```
 
-### Additional Endpoints
+### 추가 엔드포인트
 
-#### Generate Embeddings (Alternative)
+#### 임베딩 생성 (대안)
 ```http
 POST /embeddings
 ```
 
-Generate embeddings for text inputs.
+텍스트 입력에 대한 임베딩을 생성합니다.
 
-**Request Body:**
+**요청 본문:**
 ```json
 {
   "input": ["안녕하세요", "한국어 임베딩 모델입니다"],
@@ -115,7 +115,7 @@ Generate embeddings for text inputs.
 }
 ```
 
-**Response:**
+**응답:**
 ```json
 {
   "object": "list",
@@ -134,14 +134,14 @@ Generate embeddings for text inputs.
 }
 ```
 
-### Calculate Similarity
+### 유사도 계산
 ```http
 POST /similarity
 ```
 
-Calculate similarity matrix between texts.
+텍스트 간의 유사도 행렬을 계산합니다.
 
-**Request Body:**
+**요청 본문:**
 ```json
 {
   "texts": ["첫 번째 텍스트", "두 번째 텍스트"],
@@ -149,7 +149,7 @@ Calculate similarity matrix between texts.
 }
 ```
 
-**Response:**
+**응답:**
 ```json
 {
   "similarities": [[1.0, 0.85], [0.85, 1.0]],
@@ -157,45 +157,45 @@ Calculate similarity matrix between texts.
 }
 ```
 
-### List Models
+### 모델 목록
 ```http
 GET /models
 ```
 
-Get available models.
+사용 가능한 모델을 조회합니다.
 
-### Health Check
+### 헬스 체크
 ```http
 GET /health
 ```
 
-Service health status.
+서비스 상태를 확인합니다.
 
-## Configuration
+## 설정
 
-Create a `.env` file based on `.env.example`:
+`.env.example`을 기반으로 `.env` 파일을 생성하세요:
 
 ```bash
 cp .env.example .env
 ```
 
-Key configuration options:
-- `DEFAULT_MODEL`: Default embedding model (nlpai-lab/KURE-v1)
-- `MAX_BATCH_SIZE`: Maximum batch size for requests (32)
-- `MAX_TEXT_LENGTH`: Maximum text length (8192)
-- `API_KEY`: Bearer token for authentication (sk-kure-v1-your-secret-key)
-- `CACHE_DIR`: Model cache directory (./models)
-- `LOG_LEVEL`: Logging level (INFO)
+주요 설정 옵션:
+- `DEFAULT_MODEL`: 기본 임베딩 모델 (nlpai-lab/KURE-v1)
+- `MAX_BATCH_SIZE`: 요청당 최대 배치 크기 (32)
+- `MAX_TEXT_LENGTH`: 최대 텍스트 길이 (8192)
+- `API_KEY`: 인증용 Bearer 토큰 (sk-kure-v1-your-secret-key)
+- `CACHE_DIR`: 모델 캐시 디렉토리 (./models)
+- `LOG_LEVEL`: 로깅 레벨 (INFO)
 
-### Authentication
+### 인증
 
-Set `API_KEY` in your `.env` file to enable Bearer token authentication:
+Bearer 토큰 인증을 활성화하려면 `.env` 파일에 `API_KEY`를 설정하세요:
 
 ```bash
 API_KEY=sk-kure-v1-your-secret-key
 ```
 
-Use the API key in requests:
+요청에서 API 키 사용:
 
 ```bash
 curl -H "Authorization: Bearer sk-kure-v1-your-secret-key" \
@@ -204,53 +204,53 @@ curl -H "Authorization: Bearer sk-kure-v1-your-secret-key" \
      http://localhost:8000/embeddings
 ```
 
-## Available Models
+## 사용 가능한 모델
 
-- **nlpai-lab/KURE-v1**: Latest KURE model (default)
-- **nlpai-lab/KoE5**: Korean E5 model (requires prefix)
+- **nlpai-lab/KURE-v1**: 최신 KURE 모델 (기본값)
+- **nlpai-lab/KoE5**: 한국어 E5 모델 (접두사 필요)
 
-## Testing
+## 테스트
 
-Run real API tests:
+실제 API 테스트 실행:
 ```bash
-# Test with real HTTP requests
+# 실제 HTTP 요청으로 테스트
 python test_real_api.py
 
-# Test with OpenAI client library
+# OpenAI 클라이언트 라이브러리로 테스트
 python test_real_openai_client.py
 
-# Simple test client
+# 간단한 테스트 클라이언트
 python scripts/test_client.py
 ```
 
-## Production Deployment
+## 프로덕션 배포
 
-For production deployment, consider:
+프로덕션 배포 시 고려사항:
 
-1. **Process Management**: Use a process manager like `systemd`, `supervisor`, or `pm2`
-2. **Reverse Proxy**: Use nginx or Apache as a reverse proxy
-3. **Environment Variables**: Set production environment variables
-4. **Logging**: Configure proper logging and log rotation
-5. **Monitoring**: Set up health checks and monitoring
+1. **프로세스 관리**: `systemd`, `supervisor`, 또는 `pm2`와 같은 프로세스 관리자 사용
+2. **리버스 프록시**: nginx 또는 Apache를 리버스 프록시로 사용
+3. **환경 변수**: 프로덕션 환경 변수 설정
+4. **로깅**: 적절한 로깅 및 로그 순환 구성
+5. **모니터링**: 헬스 체크 및 모니터링 설정
 
-### Example with uvicorn
+### uvicorn 예제
 ```bash
-# Production server with multiple workers
+# 다중 워커를 사용한 프로덕션 서버
 uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-## API Documentation
+## API 문서
 
-Once the service is running, visit:
+서비스가 실행되면 다음 주소에서 확인할 수 있습니다:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 - OpenAPI JSON: http://localhost:8000/openapi.json
 
-## License
+## 라이선스
 
-MIT License - see LICENSE file for details.
+MIT License - 자세한 내용은 LICENSE 파일을 참조하세요.
 
-## Citation
+## 인용
 
 ```bibtex
 @misc{KURE,
