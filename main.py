@@ -13,9 +13,11 @@ from models import (
     EmbeddingRequest, EmbeddingResponse, EmbeddingData,
     SimilarityRequest, SimilarityResponse,
     ModelsResponse, ModelInfo,
-    HealthResponse, ErrorResponse
+    HealthResponse, ErrorResponse,
+    ChunkRequest, ChunkResponse, ChunkData
 )
 from model_manager import model_manager
+from text_chunker import text_chunker
 
 # Configure logging
 logging.basicConfig(
@@ -195,6 +197,53 @@ async def calculate_similarity(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to calculate similarity: {str(e)}"
+        )
+
+
+@app.post("/v1/chunk", response_model=ChunkResponse)
+async def chunk_text(
+    request: ChunkRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Chunk text into smaller pieces for processing."""
+    try:
+        # Chunk the text
+        chunks = text_chunker.chunk_text(
+            text=request.text,
+            strategy=request.strategy,
+            chunk_size=request.chunk_size,
+            overlap=request.overlap,
+            language=request.language
+        )
+
+        # Convert to response format
+        chunk_data = [
+            ChunkData(
+                text=chunk.text,
+                index=i,
+                start_char=chunk.start_char,
+                end_char=chunk.end_char,
+                token_count=chunk.token_count
+            )
+            for i, chunk in enumerate(chunks)
+        ]
+
+        total_tokens = sum(chunk.token_count for chunk in chunks)
+
+        return ChunkResponse(
+            object="list",
+            data=chunk_data,
+            total_chunks=len(chunks),
+            strategy=request.strategy,
+            original_length=len(request.text),
+            total_tokens=total_tokens
+        )
+
+    except Exception as e:
+        logger.error(f"Error chunking text: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to chunk text: {str(e)}"
         )
 
 

@@ -127,6 +127,81 @@ class HealthResponse(BaseModel):
     version: str = Field(..., description="API version")
 
 
+class ChunkRequest(BaseModel):
+    """Request model for text chunking."""
+
+    text: str = Field(
+        ...,
+        description="Text to be chunked",
+        example="이것은 긴 텍스트입니다. 여러 문장으로 구성되어 있습니다. 청킹 기능을 테스트하기 위한 예제입니다."
+    )
+    strategy: str = Field(
+        "sentence",
+        description="Chunking strategy",
+        example="sentence"
+    )
+    chunk_size: int = Field(
+        512,
+        ge=50,
+        le=8192,
+        description="Maximum chunk size in tokens",
+        example=512
+    )
+    overlap: int = Field(
+        50,
+        ge=0,
+        le=500,
+        description="Overlap between chunks in tokens",
+        example=50
+    )
+    language: str = Field(
+        "auto",
+        description="Language for chunking (auto, ko, en)",
+        example="auto"
+    )
+
+    @validator('strategy')
+    def validate_strategy(cls, v):
+        allowed_strategies = ["sentence", "recursive", "token"]
+        if v not in allowed_strategies:
+            raise ValueError(f"Strategy must be one of {allowed_strategies}")
+        return v
+
+    @validator('language')
+    def validate_language(cls, v):
+        allowed_languages = ["auto", "ko", "en"]
+        if v not in allowed_languages:
+            raise ValueError(f"Language must be one of {allowed_languages}")
+        return v
+
+    @validator('overlap')
+    def validate_overlap(cls, v, values):
+        if 'chunk_size' in values and v >= values['chunk_size']:
+            raise ValueError("Overlap must be less than chunk_size")
+        return v
+
+
+class ChunkData(BaseModel):
+    """Individual chunk data."""
+
+    text: str = Field(..., description="Chunk text content")
+    index: int = Field(..., description="Chunk index")
+    start_char: int = Field(..., description="Start character position in original text")
+    end_char: int = Field(..., description="End character position in original text")
+    token_count: int = Field(..., description="Estimated token count")
+
+
+class ChunkResponse(BaseModel):
+    """Response model for text chunking."""
+
+    object: str = "list"
+    data: List[ChunkData] = Field(..., description="List of text chunks")
+    total_chunks: int = Field(..., description="Total number of chunks")
+    strategy: str = Field(..., description="Chunking strategy used")
+    original_length: int = Field(..., description="Original text length in characters")
+    total_tokens: int = Field(..., description="Total estimated tokens across all chunks")
+
+
 class ErrorResponse(BaseModel):
     """Error response model."""
 

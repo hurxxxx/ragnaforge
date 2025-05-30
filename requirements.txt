@@ -10,6 +10,11 @@ transformers>=4.21.0
 httpx==0.25.2
 python-dotenv==1.0.0
 
+# Text chunking dependencies
+kss>=4.3.2
+nltk>=3.9
+tiktoken>=0.8.0
+
 # Development dependencies
 pytest==7.4.3
 pytest-asyncio==0.21.1
