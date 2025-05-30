@@ -207,13 +207,23 @@ async def chunk_text(
 ):
     """Chunk text into smaller pieces for processing."""
     try:
+        # Use request values or fall back to settings defaults
+        strategy = request.strategy or settings.default_chunk_strategy
+        chunk_size = request.chunk_size or settings.default_chunk_size
+        overlap = request.overlap or settings.default_chunk_overlap
+        language = request.language or settings.default_chunk_language
+
+        # Validate overlap vs chunk_size after applying defaults
+        if overlap >= chunk_size:
+            raise ValueError("Overlap must be less than chunk_size")
+
         # Chunk the text
         chunks = text_chunker.chunk_text(
             text=request.text,
-            strategy=request.strategy,
-            chunk_size=request.chunk_size,
-            overlap=request.overlap,
-            language=request.language
+            strategy=strategy,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            language=language
         )
 
         # Convert to response format
@@ -234,7 +244,7 @@ async def chunk_text(
             object="list",
             data=chunk_data,
             total_chunks=len(chunks),
-            strategy=request.strategy,
+            strategy=strategy,  # Return actual strategy used
             original_length=len(request.text),
             total_tokens=total_tokens
         )

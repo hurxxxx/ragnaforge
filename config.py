@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Text Chunking Defaults
+    default_chunk_strategy: str = "recursive"
+    default_chunk_size: int = 380
+    default_chunk_overlap: int = 70
+    default_chunk_language: str = "auto"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
