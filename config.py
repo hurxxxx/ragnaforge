@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     default_chunk_overlap: int = 70
     default_chunk_language: str = "auto"
 
+    # OpenAI API Configuration
+    openai_api_key: Optional[str] = None
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
