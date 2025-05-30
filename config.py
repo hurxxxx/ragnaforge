@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     # API Limits
     max_batch_size: int = 32
+    optimal_batch_size: int = 32
     max_text_length: int = 8192
 
     # Security
@@ -46,6 +47,11 @@ class Settings(BaseSettings):
 
     # OpenAI API Configuration
     openai_api_key: Optional[str] = None
+
+    # GPU Optimization Settings
+    gpu_memory_fraction: float = 0.8
+    cuda_visible_devices: str = "0"
+    torch_cudnn_benchmark: bool = True
 
     model_config = {
         "env_file": ".env",
