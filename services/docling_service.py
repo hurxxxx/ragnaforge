@@ -21,18 +21,24 @@ class DoclingService:
         """Initialize docling converter."""
         if self._is_initialized:
             return
-            
+
         try:
+            # Check if docling is installed
+            try:
+                import docling
+            except ImportError:
+                raise ImportError("docling package is not installed. Please install with: pip install docling")
+
             from docling.document_converter import DocumentConverter
             from docling.datamodel.base_models import InputFormat
             from docling.datamodel.pipeline_options import PdfPipelineOptions
             from docling.document_converter import PdfFormatOption
-            
+
             logger.info("Initializing Docling service...")
-            
+
             # Configure pipeline options for GPU if available
             pipeline_options = PdfPipelineOptions()
-            
+
             if torch.cuda.is_available():
                 logger.info(f"Using CUDA device: {torch.cuda.get_device_name()}")
                 # Enable GPU acceleration for docling
@@ -40,21 +46,23 @@ class DoclingService:
                     from docling.datamodel.pipeline_options import AcceleratorDevice
                     pipeline_options.accelerator_options.device = AcceleratorDevice.CUDA
                     pipeline_options.accelerator_options.cuda_use_flash_attention2 = True
-                except ImportError:
-                    logger.warning("GPU acceleration options not available in this docling version")
+                    logger.info("GPU acceleration enabled for Docling")
+                except (ImportError, AttributeError) as e:
+                    logger.warning(f"GPU acceleration options not available in this docling version: {e}")
             else:
                 logger.warning("CUDA not available, using CPU")
-            
+
             # Create converter with optimized settings
+            logger.info("Creating Docling converter...")
             self._converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
                 }
             )
-            
+
             self._is_initialized = True
             logger.info("Docling service initialized successfully")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize Docling service: {str(e)}")
             raise
@@ -159,7 +167,13 @@ class DoclingService:
                 'success': False,
                 'error': str(e),
                 'conversion_time': conversion_time,
-                'library': 'docling'
+                'library': 'docling',
+                'file_size_mb': os.path.getsize(pdf_path) / 1024**2 if os.path.exists(pdf_path) else 0.0,
+                'markdown_length': 0,
+                'images_count': 0,
+                'gpu_memory_used_gb': None,
+                'saved_files': [],
+                'metadata': None
             }
     
     def get_info(self) -> Dict[str, Any]:
