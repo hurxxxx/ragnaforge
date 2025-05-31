@@ -14,9 +14,12 @@ from models import (
     SimilarityRequest, SimilarityResponse,
     ModelsResponse, ModelInfo,
     HealthResponse, ErrorResponse,
-    ChunkRequest, ChunkResponse, ChunkData
+    ChunkRequest, ChunkResponse, ChunkData,
+    DocumentConversionRequest, DocumentConversionResponse, ConversionComparisonResponse
 )
 from services import embedding_service, chunking_service
+from services.marker_service import marker_service
+from services.docling_service import docling_service
 
 # Configure logging
 logging.basicConfig(
@@ -253,6 +256,102 @@ async def chunk_text(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to chunk text: {str(e)}"
+        )
+
+
+@app.post("/v1/convert/marker", response_model=DocumentConversionResponse)
+async def convert_with_marker(
+    request: DocumentConversionRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Convert PDF to markdown using marker-pdf."""
+    try:
+        result = marker_service.convert_pdf_to_markdown(
+            pdf_path=request.file_path,
+            output_dir=request.output_dir,
+            extract_images=request.extract_images
+        )
+        return DocumentConversionResponse(**result)
+    except Exception as e:
+        logger.error(f"Error in marker conversion: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Marker conversion failed: {str(e)}"
+        )
+
+
+@app.post("/v1/convert/docling", response_model=DocumentConversionResponse)
+async def convert_with_docling(
+    request: DocumentConversionRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Convert PDF to markdown using docling."""
+    try:
+        result = docling_service.convert_pdf_to_markdown(
+            pdf_path=request.file_path,
+            output_dir=request.output_dir,
+            extract_images=request.extract_images
+        )
+        return DocumentConversionResponse(**result)
+    except Exception as e:
+        logger.error(f"Error in docling conversion: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Docling conversion failed: {str(e)}"
+        )
+
+
+@app.post("/v1/convert/compare", response_model=ConversionComparisonResponse)
+async def compare_conversions(
+    request: DocumentConversionRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Compare PDF conversion performance between marker and docling."""
+    try:
+        # Run both conversions
+        marker_result = marker_service.convert_pdf_to_markdown(
+            pdf_path=request.file_path,
+            output_dir=request.output_dir,
+            extract_images=request.extract_images
+        )
+
+        docling_result = docling_service.convert_pdf_to_markdown(
+            pdf_path=request.file_path,
+            output_dir=request.output_dir,
+            extract_images=request.extract_images
+        )
+
+        # Calculate comparison metrics
+        comparison = {
+            "speed_comparison": {
+                "marker_time": marker_result.get('conversion_time', 0),
+                "docling_time": docling_result.get('conversion_time', 0),
+                "faster_library": "marker" if marker_result.get('conversion_time', float('inf')) < docling_result.get('conversion_time', float('inf')) else "docling",
+                "speed_ratio": docling_result.get('conversion_time', 1) / marker_result.get('conversion_time', 1) if marker_result.get('conversion_time', 0) > 0 else None
+            },
+            "output_comparison": {
+                "marker_markdown_length": marker_result.get('markdown_length', 0),
+                "docling_markdown_length": docling_result.get('markdown_length', 0),
+                "marker_images": marker_result.get('images_count', 0),
+                "docling_images": docling_result.get('images_count', 0)
+            },
+            "resource_usage": {
+                "marker_gpu_memory": marker_result.get('gpu_memory_used_gb'),
+                "docling_gpu_memory": docling_result.get('gpu_memory_used_gb')
+            }
+        }
+
+        return ConversionComparisonResponse(
+            marker_result=DocumentConversionResponse(**marker_result),
+            docling_result=DocumentConversionResponse(**docling_result),
+            comparison=comparison
+        )
+
+    except Exception as e:
+        logger.error(f"Error in conversion comparison: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Conversion comparison failed: {str(e)}"
         )
 
 

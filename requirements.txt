@@ -19,6 +19,10 @@ tiktoken==0.9.0
 openai==1.82.1
 scikit-learn==1.6.1
 
+# Document conversion dependencies
+marker-pdf[full]
+docling
+
 # Development dependencies
 pytest==8.3.5
 pytest-asyncio==1.0.0

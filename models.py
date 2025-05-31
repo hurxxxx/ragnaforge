@@ -221,3 +221,35 @@ class ErrorResponse(BaseModel):
             }
         }
     }
+
+
+# Document conversion models
+class DocumentConversionRequest(BaseModel):
+    """Request for document conversion."""
+
+    file_path: str = Field(..., description="Path to the PDF file to convert")
+    output_dir: Optional[str] = Field(None, description="Directory to save output files")
+    extract_images: bool = Field(True, description="Whether to extract images")
+
+
+class DocumentConversionResponse(BaseModel):
+    """Response for document conversion."""
+
+    success: bool = Field(..., description="Whether conversion was successful")
+    library: str = Field(..., description="Library used for conversion")
+    conversion_time: float = Field(..., description="Time taken for conversion in seconds")
+    file_size_mb: float = Field(..., description="Size of input file in MB")
+    markdown_length: Optional[int] = Field(None, description="Length of generated markdown")
+    images_count: Optional[int] = Field(None, description="Number of images found")
+    gpu_memory_used_gb: Optional[float] = Field(None, description="GPU memory used in GB")
+    saved_files: Optional[List[str]] = Field(None, description="List of saved output files")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Document metadata")
+    error: Optional[str] = Field(None, description="Error message if conversion failed")
+
+
+class ConversionComparisonResponse(BaseModel):
+    """Response for conversion comparison."""
+
+    marker_result: DocumentConversionResponse = Field(..., description="Marker conversion result")
+    docling_result: DocumentConversionResponse = Field(..., description="Docling conversion result")
+    comparison: Dict[str, Any] = Field(..., description="Performance comparison metrics")
