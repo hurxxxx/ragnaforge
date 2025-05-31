@@ -99,6 +99,15 @@ class MarkerService:
                     from marker.output import text_from_rendered
                     markdown_text, metadata, images = text_from_rendered(rendered)
                     logger.info("Used older marker API (text_from_rendered)")
+
+                # Ensure metadata is a dictionary
+                if not isinstance(metadata, dict):
+                    logger.warning(f"Metadata is not a dict (type: {type(metadata)}, value: {metadata}), converting to dict")
+                    if isinstance(metadata, str):
+                        metadata = {"format": metadata}
+                    else:
+                        metadata = {"raw_metadata": str(metadata)}
+
             except Exception as extract_error:
                 logger.warning(f"Error with standard extraction, trying fallback: {extract_error}")
                 # Fallback: try to get text directly from the document
@@ -115,7 +124,7 @@ class MarkerService:
                     else:
                         markdown_text = str(rendered)
 
-                    metadata = {}
+                    metadata = {"extraction_method": "fallback"}
                     images = {}
                     logger.info("Used fallback text extraction")
                 except Exception as fallback_error:
