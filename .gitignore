@@ -151,3 +151,12 @@ logs/
 # Temporary files
 tmp/
 temp/
+
+# Document conversion outputs
+test_output/
+converted_docs/
+*_output/
+
+# Test files
+test_conversion_simple.py
+test_api_client.py
