@@ -285,59 +285,20 @@ curl -H "Authorization: Bearer sk-kure-v1-your-secret-key" \
 
 ## 테스트
 
-### 기본 API 테스트
+### 기본 테스트
 ```bash
-# 실제 HTTP 요청으로 테스트
+# API 기본 기능 테스트
 python tests/test_real_api.py
 
-# OpenAI 클라이언트 라이브러리로 테스트
+# OpenAI 클라이언트 호환성 테스트
 python tests/test_real_openai_client.py
 
 # 텍스트 청킹 기능 테스트
 python tests/test_chunking.py
-
-# 샘플 문서 청킹 테스트
-python tests/test_sample_chunking.py
-
-# 새로운 기본값 테스트
-python tests/test_new_defaults.py
-
-# 간단한 테스트 클라이언트
-python tests/test_client.py
 ```
 
-### 성능 비교 테스트
-```bash
-# OpenAI vs KURE v1 성능 비교
-python tests/test_performance_comparison.py
-
-# 실제 문서 기반 성능 테스트
-python tests/test_real_document_performance.py
-
-# 배치 크기 최적화 테스트
-python tests/test_batch_size_optimization.py
-
-# OpenAI vs KURE v1 실제 문서 비교
-python tests/test_openai_vs_kure_real_document.py
-```
-
-### GPU 성능 테스트
-```bash
-# GPU 서버 환경 설정 (최초 1회)
-./setup_gpu_server.sh
-
-# GPU 성능 테스트 실행
-./run_gpu_test.sh
-
-# 또는 수동 실행
-python tests/test_gpu_performance.py
-
-# GPU vs CPU 성능 비교
-python tests/test_gpu_vs_cpu_comparison.py
-
-# GPU 모니터링
-./monitor_gpu.sh
-```
+### 추가 테스트
+성능 비교, GPU 테스트 등 추가 테스트는 `tests/archived/` 디렉토리에서 확인할 수 있습니다.
 
 ## 프로덕션 배포
 
