@@ -2,8 +2,10 @@
 
 import logging
 import time
+import tempfile
+import os
 from typing import List
-from fastapi import FastAPI, HTTPException, Depends, status, Header
+from fastapi import FastAPI, HTTPException, Depends, status, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -14,9 +16,11 @@ from models import (
     SimilarityRequest, SimilarityResponse,
     ModelsResponse, ModelInfo,
     HealthResponse, ErrorResponse,
-    ChunkRequest, ChunkResponse, ChunkData
+    ChunkRequest, ChunkResponse, ChunkData,
+    DocumentConvertRequest, DocumentConvertResponse
 )
 from services import embedding_service, chunking_service
+from services.document_conversion_service import document_conversion_service
 
 # Configure logging
 logging.basicConfig(
@@ -253,6 +257,63 @@ async def chunk_text(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to chunk text: {str(e)}"
+        )
+
+
+@app.post("/v1/convert", response_model=DocumentConvertResponse)
+async def convert_document(
+    file: UploadFile = File(...),
+    output_format: str = Form("markdown"),
+    extract_images: bool = Form(True),
+    use_llm: bool = Form(False),
+    authorization: str = Depends(verify_api_key)
+):
+    """Convert document to markdown/json/html format with image extraction."""
+    try:
+        # Validate file format
+        if not document_conversion_service.is_supported_format(file.filename):
+            supported_formats = document_conversion_service.get_supported_formats()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file format. Supported formats: {supported_formats}"
+            )
+
+        # Validate output format
+        if output_format not in ["markdown", "json", "html"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Output format must be one of: markdown, json, html"
+            )
+
+        # Save uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+
+        try:
+            # Convert document
+            result = document_conversion_service.convert_document(
+                file_path=temp_file_path,
+                output_format=output_format,
+                extract_images=extract_images,
+                use_llm=use_llm
+            )
+
+            return DocumentConvertResponse(**result)
+
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error converting document: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to convert document: {str(e)}"
         )
 
 

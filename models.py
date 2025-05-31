@@ -1,6 +1,6 @@
 """Pydantic models for API request/response validation."""
 
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any
 from pydantic import BaseModel, Field, validator
 
 
@@ -203,6 +203,47 @@ class ChunkResponse(BaseModel):
     strategy: str = Field(..., description="Chunking strategy used")
     original_length: int = Field(..., description="Original text length in characters")
     total_tokens: int = Field(..., description="Total estimated tokens across all chunks")
+
+
+class DocumentConvertRequest(BaseModel):
+    """Request model for document conversion."""
+
+    output_format: Optional[str] = Field(
+        "markdown",
+        description="Output format (markdown, json, html)",
+        example="markdown"
+    )
+    extract_images: Optional[bool] = Field(
+        True,
+        description="Whether to extract and save images",
+        example=True
+    )
+    use_llm: Optional[bool] = Field(
+        False,
+        description="Use LLM to improve conversion accuracy",
+        example=False
+    )
+
+    @validator('output_format')
+    def validate_output_format(cls, v):
+        if v is not None:
+            allowed_formats = ["markdown", "json", "html"]
+            if v not in allowed_formats:
+                raise ValueError(f"Output format must be one of {allowed_formats}")
+        return v
+
+
+class DocumentConvertResponse(BaseModel):
+    """Response model for document conversion."""
+
+    object: str = "document_conversion"
+    markdown_content: Optional[str] = Field(None, description="Converted markdown content")
+    json_content: Optional[Dict[str, Any]] = Field(None, description="Converted JSON content")
+    html_content: Optional[str] = Field(None, description="Converted HTML content")
+    images: List[str] = Field(default_factory=list, description="List of extracted image filenames")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Document metadata")
+    output_format: str = Field(..., description="Output format used")
+    file_path: str = Field(..., description="Path to saved markdown file")
 
 
 class ErrorResponse(BaseModel):
