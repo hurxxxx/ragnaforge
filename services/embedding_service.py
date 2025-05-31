@@ -1,4 +1,4 @@
-"""Model management for KURE embedding models."""
+"""Embedding service for KURE models."""
 
 import logging
 import time
@@ -12,8 +12,8 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-class ModelManager:
-    """Manages KURE embedding models."""
+class EmbeddingService:
+    """Manages KURE embedding models and provides embedding functionality."""
 
     def __init__(self):
         self._models: Dict[str, SentenceTransformer] = {}
@@ -128,5 +128,5 @@ class ModelManager:
             logger.info(f"Unloaded model: {model_name}")
 
 
-# Global model manager instance
-model_manager = ModelManager()
+# Global embedding service instance
+embedding_service = EmbeddingService()

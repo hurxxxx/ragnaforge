@@ -16,8 +16,7 @@ from models import (
     HealthResponse, ErrorResponse,
     ChunkRequest, ChunkResponse, ChunkData
 )
-from model_manager import model_manager
-from text_chunker import text_chunker
+from services import embedding_service, chunking_service
 
 # Configure logging
 logging.basicConfig(
@@ -108,7 +107,7 @@ async def startup_event():
     """Load default model on startup."""
     logger.info("Starting KURE API service...")
     try:
-        model_manager.load_model(settings.default_model)
+        embedding_service.load_model(settings.default_model)
         logger.info(f"Default model {settings.default_model} loaded successfully")
     except Exception as e:
         logger.error(f"Failed to load default model: {str(e)}")
@@ -119,7 +118,7 @@ async def health_check():
     """Health check endpoint."""
     return HealthResponse(
         status="healthy",
-        is_model_loaded=model_manager.is_model_loaded(),
+        is_model_loaded=embedding_service.is_model_loaded(),
         version=settings.app_version
     )
 
@@ -127,7 +126,7 @@ async def health_check():
 @app.get("/models", response_model=ModelsResponse)
 async def list_models():
     """List available models."""
-    models = model_manager.get_available_models()
+    models = embedding_service.get_available_models()
     return ModelsResponse(
         object="list",
         data=[ModelInfo(**model) for model in models]
@@ -145,7 +144,7 @@ async def create_embeddings(
         model_name = request.model or settings.default_model
 
         # Generate embeddings
-        embeddings = model_manager.encode_texts(request.input, model_name)
+        embeddings = embedding_service.encode_texts(request.input, model_name)
 
         # Format response
         embedding_data = [
@@ -185,7 +184,7 @@ async def calculate_similarity(
         model_name = request.model or settings.default_model
 
         # Calculate similarity
-        similarity_matrix = model_manager.calculate_similarity(request.texts, model_name)
+        similarity_matrix = embedding_service.calculate_similarity(request.texts, model_name)
 
         return SimilarityResponse(
             similarities=similarity_matrix.tolist(),
@@ -218,7 +217,7 @@ async def chunk_text(
             raise ValueError("Overlap must be less than chunk_size")
 
         # Chunk the text
-        chunks = text_chunker.chunk_text(
+        chunks = chunking_service.chunk_text(
             text=request.text,
             strategy=strategy,
             chunk_size=chunk_size,
