@@ -37,7 +37,7 @@ chmod +x setup_gpu_server.sh
 ```
 
 **설정 완료 시 다음이 자동으로 설치됩니다:**
-- ✅ Conda 환경 (kure-api)
+- ✅ Conda 환경 (ragnaforge)
 - ✅ PyTorch with CUDA
 - ✅ 필요한 Python 패키지들
 - ✅ GPU 최적화 설정
@@ -47,7 +47,7 @@ chmod +x setup_gpu_server.sh
 ### 환경 활성화
 ```bash
 # Conda 사용 시
-conda activate kure-api
+conda activate ragnaforge
 
 # 또는 venv 사용 시
 source venv/bin/activate
@@ -248,8 +248,8 @@ OpenAI 대비: 1.2배 빠름
 cp .env.gpu .env.production
 
 # 서비스 등록
-sudo systemctl enable kure-api
-sudo systemctl start kure-api
+sudo systemctl enable ragnaforge
+sudo systemctl start ragnaforge
 ```
 
 ---

@@ -34,7 +34,7 @@ clean:
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
 
 build:
-	docker build -t kure-api .
+	docker build -t ragnaforge .
 
 run:
 	docker-compose up -d

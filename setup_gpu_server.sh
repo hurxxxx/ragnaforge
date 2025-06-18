@@ -61,22 +61,22 @@ if command -v conda &> /dev/null; then
     fi
 
     # Create conda environment if it doesn't exist
-    if conda env list | grep -q "kure-api"; then
-        echo "✅ kure-api environment already exists"
+    if conda env list | grep -q "ragnaforge"; then
+        echo "✅ ragnaforge environment already exists"
         echo "🔄 Removing existing environment to ensure clean setup..."
-        conda env remove -n kure-api -y
-        echo "📦 Creating fresh kure-api conda environment..."
-        conda create -n kure-api python=3.11 -y
+        conda env remove -n ragnaforge -y
+        echo "📦 Creating fresh ragnaforge conda environment..."
+        conda create -n ragnaforge python=3.11 -y
         check_success "Conda environment creation"
     else
-        echo "📦 Creating kure-api conda environment..."
-        conda create -n kure-api python=3.11 -y
+        echo "📦 Creating ragnaforge conda environment..."
+        conda create -n ragnaforge python=3.11 -y
         check_success "Conda environment creation"
     fi
 
-    echo "🔄 Activating kure-api environment..."
+    echo "🔄 Activating ragnaforge environment..."
     source $(conda info --base)/etc/profile.d/conda.sh
-    conda activate kure-api
+    conda activate ragnaforge
     check_success "Environment activation"
 
 else
@@ -285,9 +285,9 @@ else
 fi
 
 # Activate environment
-if command -v conda &> /dev/null && conda env list | grep -q "kure-api"; then
+if command -v conda &> /dev/null && conda env list | grep -q "ragnaforge"; then
     source $(conda info --base)/etc/profile.d/conda.sh
-    conda activate kure-api
+    conda activate ragnaforge
 elif [ -d "venv" ]; then
     source venv/bin/activate
 fi
@@ -349,7 +349,7 @@ if [[ $ROOT_USER == true ]]; then
     echo "1. Activate environment:"
     if command -v conda &> /dev/null; then
         echo "   source $(conda info --base)/etc/profile.d/conda.sh"
-        echo "   conda activate kure-api"
+        echo "   conda activate ragnaforge"
     else
         echo "   source venv/bin/activate"
     fi

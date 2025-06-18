@@ -19,7 +19,7 @@ cd kure-v1-api-gateway
 
 ### ✅ 3. 서버 시작 (30초)
 ```bash
-conda activate kure-api
+conda activate ragnaforge
 python main.py &             # 백그라운드 실행
 curl http://localhost:8000/health  # 상태 확인
 ```
@@ -36,7 +36,7 @@ curl http://localhost:8000/health  # 상태 확인
 ### 환경 설정
 ```bash
 ./setup_gpu_server.sh        # 전체 환경 설정
-conda activate kure-api       # 환경 활성화
+conda activate ragnaforge       # 환경 활성화
 ```
 
 ### 서버 관리

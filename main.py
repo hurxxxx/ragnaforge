@@ -321,14 +321,42 @@ async def compare_conversions(
             extract_images=request.extract_images
         )
 
+        # Check success status
+        marker_success = marker_result.get('success', False)
+        docling_success = docling_result.get('success', False)
+
         # Calculate comparison metrics
+        speed_comparison = {
+            "marker_time": marker_result.get('conversion_time', 0),
+            "docling_time": docling_result.get('conversion_time', 0),
+        }
+
+        # Only compare speed if both conversions were successful
+        if marker_success and docling_success:
+            marker_time = marker_result.get('conversion_time', float('inf'))
+            docling_time = docling_result.get('conversion_time', float('inf'))
+
+            if marker_time < docling_time:
+                speed_comparison["faster_library"] = "marker"
+                speed_comparison["speed_ratio"] = docling_time / marker_time if marker_time > 0 else None
+            else:
+                speed_comparison["faster_library"] = "docling"
+                speed_comparison["speed_ratio"] = marker_time / docling_time if docling_time > 0 else None
+        elif marker_success and not docling_success:
+            speed_comparison["faster_library"] = "marker"
+            speed_comparison["speed_ratio"] = None
+            speed_comparison["note"] = "Only marker succeeded"
+        elif not marker_success and docling_success:
+            speed_comparison["faster_library"] = "docling"
+            speed_comparison["speed_ratio"] = None
+            speed_comparison["note"] = "Only docling succeeded"
+        else:
+            speed_comparison["faster_library"] = None
+            speed_comparison["speed_ratio"] = None
+            speed_comparison["note"] = "Both conversions failed"
+
         comparison = {
-            "speed_comparison": {
-                "marker_time": marker_result.get('conversion_time', 0),
-                "docling_time": docling_result.get('conversion_time', 0),
-                "faster_library": "marker" if marker_result.get('conversion_time', float('inf')) < docling_result.get('conversion_time', float('inf')) else "docling",
-                "speed_ratio": docling_result.get('conversion_time', 1) / marker_result.get('conversion_time', 1) if marker_result.get('conversion_time', 0) > 0 else None
-            },
+            "speed_comparison": speed_comparison,
             "output_comparison": {
                 "marker_markdown_length": marker_result.get('markdown_length', 0),
                 "docling_markdown_length": docling_result.get('markdown_length', 0),
