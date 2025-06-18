@@ -2,6 +2,7 @@
 
 from typing import List, Optional, Union, Dict, Any
 from pydantic import BaseModel, Field, validator
+from config import settings
 
 
 class EmbeddingRequest(BaseModel):
@@ -40,8 +41,8 @@ class EmbeddingRequest(BaseModel):
                 raise ValueError("Text length exceeds maximum limit of 8192 characters")
             return [v]
         elif isinstance(v, list):
-            if len(v) > 32:
-                raise ValueError("Batch size exceeds maximum limit of 32")
+            if len(v) > settings.max_batch_size:
+                raise ValueError(f"Batch size exceeds maximum limit of {settings.max_batch_size}")
             for text in v:
                 if not isinstance(text, str):
                     raise ValueError("All inputs must be strings")

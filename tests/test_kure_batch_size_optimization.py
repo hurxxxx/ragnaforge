@@ -9,7 +9,7 @@ import time
 import json
 import requests
 import numpy as np
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 import statistics
@@ -38,7 +38,7 @@ class KureBatchSizeOptimizer:
         self.test_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         
         # 테스트할 배치 사이즈들 (최대 제한 찾기 위해 150까지)
-        self.batch_sizes = [10,  32]
+        self.batch_sizes = [10, 32, 64, 100, 128, 150]
         
     def load_document(self, file_path: str) -> str:
         """문서 파일을 로드합니다."""
@@ -84,74 +84,122 @@ class KureBatchSizeOptimizer:
     def test_batch_size(self, chunks: List[str], batch_size: int, test_chunks: int = 500) -> Dict[str, Any]:
         """특정 배치 사이즈로 KURE 임베딩 성능을 테스트합니다."""
         print(f"\n🔍 배치 사이즈 {batch_size} 테스트 (청크 {test_chunks}개)...")
-        
+
         # 테스트용 청크 샘플링
         test_sample = chunks[:test_chunks] if len(chunks) >= test_chunks else chunks
-        
-        start_time = time.time()
+
+        # 시간 측정 변수들
+        total_start_time = time.time()
         embeddings = []
         batch_times = []
+        network_times = []
+        processing_times = []
         request_count = 0
-        
+
         try:
             for i in range(0, len(test_sample), batch_size):
                 batch = test_sample[i:i + batch_size]
+
+                # 개별 배치 처리 시간 측정
                 batch_start = time.time()
-                
+
                 payload = {
                     "input": batch,
                     "model": "nlpai-lab/KURE-v1"
                 }
-                
+
+                # 네트워크 요청 시간 측정
+                network_start = time.time()
                 response = requests.post(
                     f"{self.kure_base_url}/embeddings",
                     json=payload,
                     headers=self.kure_headers
                 )
-                
+                network_end = time.time()
+                network_time = network_end - network_start
+                network_times.append(network_time)
+
+                # 응답 처리 시간 측정
+                processing_start = time.time()
                 batch_end = time.time()
                 batch_time = batch_end - batch_start
                 batch_times.append(batch_time)
                 request_count += 1
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     batch_embeddings = [item['embedding'] for item in data['data']]
                     embeddings.extend(batch_embeddings)
-                    
+                    processing_end = time.time()
+                    processing_time = processing_end - processing_start
+                    processing_times.append(processing_time)
+
                     if i % (batch_size * 10) == 0:  # 진행상황 출력
                         print(f"   진행: {len(embeddings)}/{len(test_sample)} 청크 완료")
                 else:
                     print(f"❌ 배치 실패: {response.status_code}")
-                    return {"success": False, "error": f"HTTP {response.status_code}"}
-        
+                    try:
+                        error_data = response.json()
+                        print(f"   오류 상세: {error_data}")
+                    except:
+                        print(f"   응답 텍스트: {response.text}")
+                    return {"success": False, "error": f"HTTP {response.status_code}", "response_text": response.text}
+
         except Exception as e:
             print(f"❌ 임베딩 오류: {e}")
             return {"success": False, "error": str(e)}
+
+        total_end_time = time.time()
+        total_time = total_end_time - total_start_time
         
-        total_time = time.time() - start_time
-        
+        # 상세 시간 분석
+        avg_network_time = statistics.mean(network_times) if network_times else 0
+        avg_processing_time = statistics.mean(processing_times) if processing_times else 0
+        total_network_time = sum(network_times)
+        total_processing_time = sum(processing_times)
+
         result = {
             "success": True,
             "batch_size": batch_size,
             "test_chunks": len(test_sample),
+
+            # 전체 시간 측정
             "total_time": total_time,
+            "total_network_time": total_network_time,
+            "total_processing_time": total_processing_time,
+            "overhead_time": total_time - total_network_time,
+
+            # 평균 시간 측정
             "avg_time_per_chunk": total_time / len(test_sample),
-            "chunks_per_second": len(test_sample) / total_time,
-            "request_count": request_count,
+            "avg_network_time_per_request": avg_network_time,
+            "avg_processing_time_per_request": avg_processing_time,
             "avg_batch_time": statistics.mean(batch_times),
+
+            # 처리량 측정
+            "chunks_per_second": len(test_sample) / total_time,
+            "requests_per_second": request_count / total_time,
+            "throughput_per_request": len(test_sample) / request_count,
+
+            # 요청 통계
+            "request_count": request_count,
             "batch_time_std": statistics.stdev(batch_times) if len(batch_times) > 1 else 0,
             "min_batch_time": min(batch_times),
             "max_batch_time": max(batch_times),
-            "throughput_per_request": len(test_sample) / request_count,
-            "requests_per_second": request_count / total_time
+
+            # 시간 분포 분석
+            "network_time_ratio": total_network_time / total_time if total_time > 0 else 0,
+            "processing_time_ratio": total_processing_time / total_time if total_time > 0 else 0,
+            "overhead_ratio": (total_time - total_network_time) / total_time if total_time > 0 else 0
         }
         
         print(f"✅ 배치 사이즈 {batch_size} 완료:")
-        print(f"   총 시간: {total_time:.2f}초")
-        print(f"   처리 속도: {result['chunks_per_second']:.2f} 청크/초")
-        print(f"   요청 수: {request_count}개")
-        print(f"   평균 배치 시간: {result['avg_batch_time']:.3f}초")
+        print(f"   📊 전체 처리 시간: {total_time:.2f}초")
+        print(f"   🌐 네트워크 시간: {total_network_time:.2f}초 ({result['network_time_ratio']*100:.1f}%)")
+        print(f"   ⚡ 처리 시간: {total_processing_time:.2f}초 ({result['processing_time_ratio']*100:.1f}%)")
+        print(f"   🔄 오버헤드: {result['overhead_time']:.2f}초 ({result['overhead_ratio']*100:.1f}%)")
+        print(f"   🚀 처리 속도: {result['chunks_per_second']:.2f} 청크/초")
+        print(f"   📈 요청 수: {request_count}개 ({result['requests_per_second']:.2f} 요청/초)")
+        print(f"   ⏱️  평균 배치 시간: {result['avg_batch_time']:.3f}초")
         
         return result
 
@@ -247,9 +295,64 @@ class KureBatchSizeOptimizer:
 
         return recommendations
 
+    def analyze_time_performance(self, results: Dict[str, Any]) -> Dict[str, Any]:
+        """시간 성능을 상세 분석합니다."""
+        if not results:
+            return {}
+
+        # 시간 분석 데이터 수집
+        time_analysis = {
+            "batch_sizes": [],
+            "total_times": [],
+            "network_times": [],
+            "processing_times": [],
+            "overhead_times": [],
+            "network_ratios": [],
+            "processing_ratios": [],
+            "overhead_ratios": [],
+            "efficiency_scores": []
+        }
+
+        for result in results.values():
+            time_analysis["batch_sizes"].append(result["batch_size"])
+            time_analysis["total_times"].append(result["total_time"])
+            time_analysis["network_times"].append(result["total_network_time"])
+            time_analysis["processing_times"].append(result["total_processing_time"])
+            time_analysis["overhead_times"].append(result["overhead_time"])
+            time_analysis["network_ratios"].append(result["network_time_ratio"])
+            time_analysis["processing_ratios"].append(result["processing_time_ratio"])
+            time_analysis["overhead_ratios"].append(result["overhead_ratio"])
+
+            # 효율성 점수 계산 (처리량 / 전체시간)
+            efficiency = result["chunks_per_second"] / result["total_time"]
+            time_analysis["efficiency_scores"].append(efficiency)
+
+        # 최적/최악 성능 찾기
+        min_time_idx = time_analysis["total_times"].index(min(time_analysis["total_times"]))
+        max_time_idx = time_analysis["total_times"].index(max(time_analysis["total_times"]))
+        max_efficiency_idx = time_analysis["efficiency_scores"].index(max(time_analysis["efficiency_scores"]))
+
+        analysis_summary = {
+            "fastest_batch_size": time_analysis["batch_sizes"][min_time_idx],
+            "fastest_time": time_analysis["total_times"][min_time_idx],
+            "slowest_batch_size": time_analysis["batch_sizes"][max_time_idx],
+            "slowest_time": time_analysis["total_times"][max_time_idx],
+            "most_efficient_batch_size": time_analysis["batch_sizes"][max_efficiency_idx],
+            "max_efficiency_score": time_analysis["efficiency_scores"][max_efficiency_idx],
+            "time_improvement": (time_analysis["total_times"][max_time_idx] - time_analysis["total_times"][min_time_idx]) / time_analysis["total_times"][max_time_idx] * 100,
+            "avg_network_ratio": statistics.mean(time_analysis["network_ratios"]) * 100,
+            "avg_processing_ratio": statistics.mean(time_analysis["processing_ratios"]) * 100,
+            "avg_overhead_ratio": statistics.mean(time_analysis["overhead_ratios"]) * 100
+        }
+
+        return {
+            "time_data": time_analysis,
+            "summary": analysis_summary
+        }
 
 
-    def save_results(self, results: Dict[str, Any], analysis: Dict[str, Any]) -> str:
+
+    def save_results(self, results: Dict[str, Any], analysis: Dict[str, Any], time_analysis: Optional[Dict[str, Any]] = None) -> str:
         """결과를 파일로 저장합니다."""
         # 결과 디렉토리 생성
         output_dir = f"test_outputs/{self.test_timestamp}"
@@ -263,7 +366,8 @@ class KureBatchSizeOptimizer:
                 "test_type": "KURE v1 Batch Size Optimization"
             },
             "detailed_results": results,
-            "analysis": analysis
+            "analysis": analysis,
+            "time_analysis": time_analysis
         }
 
         json_file = f"{output_dir}/kure_batch_size_optimization.json"
@@ -272,7 +376,7 @@ class KureBatchSizeOptimizer:
 
         # 요약 리포트 저장
         summary_file = f"{output_dir}/batch_size_summary.md"
-        self.generate_markdown_report(full_report, summary_file)
+        self.generate_markdown_report(full_report, summary_file, time_analysis)
 
         print(f"✅ 결과 저장 완료:")
         print(f"   📄 JSON 리포트: {json_file}")
@@ -280,7 +384,7 @@ class KureBatchSizeOptimizer:
 
         return output_dir
 
-    def generate_markdown_report(self, report: Dict[str, Any], file_path: str):
+    def generate_markdown_report(self, report: Dict[str, Any], file_path: str, time_analysis: Optional[Dict[str, Any]] = None):
         """마크다운 형식의 요약 리포트를 생성합니다."""
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(f"# KURE v1 배치 사이즈 최적화 리포트\n\n")
@@ -295,14 +399,36 @@ class KureBatchSizeOptimizer:
 
             # 성능 비교 테이블
             f.write("## 📊 성능 비교\n\n")
-            f.write("| 배치 사이즈 | 처리량 (청크/초) | 평균 배치 시간 (초) | 요청/초 | 표준편차 |\n")
-            f.write("|-------------|------------------|-------------------|---------|----------|\n")
+            f.write("| 배치 사이즈 | 전체 시간 (초) | 처리량 (청크/초) | 네트워크 시간 (초) | 처리 시간 (초) | 오버헤드 (초) | 요청/초 |\n")
+            f.write("|-------------|---------------|------------------|------------------|---------------|-------------|----------|\n")
 
             for result in report["detailed_results"].values():
-                f.write(f"| {result['batch_size']} | {result['chunks_per_second']:.2f} | {result['avg_batch_time']:.3f} | {result['requests_per_second']:.2f} | {result['batch_time_std']:.3f} |\n")
+                f.write(f"| {result['batch_size']} | {result['total_time']:.2f} | {result['chunks_per_second']:.2f} | {result['total_network_time']:.2f} | {result['total_processing_time']:.2f} | {result['overhead_time']:.2f} | {result['requests_per_second']:.2f} |\n")
+
+            # 시간 분석 테이블
+            f.write("\n## ⏱️ 시간 분석\n\n")
+            f.write("| 배치 사이즈 | 네트워크 비율 | 처리 비율 | 오버헤드 비율 | 평균 배치 시간 | 표준편차 |\n")
+            f.write("|-------------|--------------|-----------|-------------|---------------|----------|\n")
+
+            for result in report["detailed_results"].values():
+                f.write(f"| {result['batch_size']} | {result['network_time_ratio']*100:.1f}% | {result['processing_time_ratio']*100:.1f}% | {result['overhead_ratio']*100:.1f}% | {result['avg_batch_time']:.3f}초 | {result['batch_time_std']:.3f} |\n")
+
+            # 시간 분석 요약
+            if time_analysis and "summary" in time_analysis:
+                summary = time_analysis["summary"]
+                f.write("\n## ⚡ 시간 성능 분석\n\n")
+                f.write(f"**가장 빠른 처리**: 배치 사이즈 {summary['fastest_batch_size']} ({summary['fastest_time']:.2f}초)\n")
+                f.write(f"**가장 느린 처리**: 배치 사이즈 {summary['slowest_batch_size']} ({summary['slowest_time']:.2f}초)\n")
+                f.write(f"**시간 개선율**: {summary['time_improvement']:.1f}%\n")
+                f.write(f"**가장 효율적**: 배치 사이즈 {summary['most_efficient_batch_size']} (효율성 점수: {summary['max_efficiency_score']:.2f})\n\n")
+
+                f.write("**평균 시간 분포:**\n")
+                f.write(f"- 네트워크 시간: {summary['avg_network_ratio']:.1f}%\n")
+                f.write(f"- 처리 시간: {summary['avg_processing_ratio']:.1f}%\n")
+                f.write(f"- 오버헤드: {summary['avg_overhead_ratio']:.1f}%\n\n")
 
             # 권장사항
-            f.write("\n## 💡 권장사항\n\n")
+            f.write("## 💡 권장사항\n\n")
             for i, rec in enumerate(analysis["recommendations"], 1):
                 f.write(f"{i}. {rec}\n")
 
@@ -332,15 +458,18 @@ class KureBatchSizeOptimizer:
         # 4. 결과 분석
         analysis = self.analyze_results(results)
 
-        # 5. 결과 저장
-        output_dir = self.save_results(results, analysis)
+        # 5. 시간 성능 분석
+        time_analysis = self.analyze_time_performance(results)
 
-        # 6. 결과 출력
-        self.print_summary(results, analysis)
+        # 6. 결과 저장
+        output_dir = self.save_results(results, analysis, time_analysis)
+
+        # 7. 결과 출력
+        self.print_summary(results, analysis, time_analysis)
 
         return output_dir
 
-    def print_summary(self, results: Dict[str, Any], analysis: Dict[str, Any]):
+    def print_summary(self, results: Dict[str, Any], analysis: Dict[str, Any], time_analysis: Optional[Dict[str, Any]] = None):
         """결과 요약을 출력합니다."""
         print(f"\n🎉 배치 사이즈 최적화 테스트 완료!")
         print("=" * 80)
@@ -356,6 +485,19 @@ class KureBatchSizeOptimizer:
 
         for i, (_, result) in enumerate(sorted_results[:5], 1):
             print(f"  {i}. 배치 사이즈 {result['batch_size']}: {result['chunks_per_second']:.2f} 청크/초")
+
+        # 시간 분석 요약 출력
+        if time_analysis and "summary" in time_analysis:
+            summary = time_analysis["summary"]
+            print(f"\n⚡ 시간 성능 분석:")
+            print(f"  🏃 가장 빠른 처리: 배치 사이즈 {summary['fastest_batch_size']} ({summary['fastest_time']:.2f}초)")
+            print(f"  🐌 가장 느린 처리: 배치 사이즈 {summary['slowest_batch_size']} ({summary['slowest_time']:.2f}초)")
+            print(f"  📈 시간 개선율: {summary['time_improvement']:.1f}%")
+            print(f"  ⚡ 가장 효율적: 배치 사이즈 {summary['most_efficient_batch_size']} (효율성: {summary['max_efficiency_score']:.2f})")
+            print(f"\n📊 평균 시간 분포:")
+            print(f"  🌐 네트워크: {summary['avg_network_ratio']:.1f}%")
+            print(f"  ⚙️  처리: {summary['avg_processing_ratio']:.1f}%")
+            print(f"  🔄 오버헤드: {summary['avg_overhead_ratio']:.1f}%")
 
         print(f"\n💡 권장사항:")
         for i, rec in enumerate(analysis["recommendations"], 1):
