@@ -240,6 +240,7 @@ class DocumentConversionResponse(BaseModel):
     library: str = Field(..., description="Library used for conversion")
     conversion_time: float = Field(..., description="Time taken for conversion in seconds")
     file_size_mb: float = Field(..., description="Size of input file in MB")
+    markdown: Optional[str] = Field(None, description="Generated markdown content")
     markdown_length: Optional[int] = Field(None, description="Length of generated markdown")
     images_count: Optional[int] = Field(None, description="Number of images found")
     gpu_memory_used_gb: Optional[float] = Field(None, description="GPU memory used in GB")
