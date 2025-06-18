@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     max_sequence_length: int = 512
 
     # API Limits
-    max_batch_size: int = 32
-    optimal_batch_size: int = 32
+    max_batch_size: int = 150
+    optimal_batch_size: int = 10
     max_text_length: int = 8192
 
     # Security
