@@ -41,12 +41,30 @@ class EmbeddingService:
         if model_name not in self._models:
             logger.info(f"Loading model: {model_name}")
             try:
+                # GPU 최적화 설정
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                logger.info(f"Using device: {device}")
+
+                if device == "cuda":
+                    # GPU 메모리 최적화
+                    torch.cuda.empty_cache()
+                    logger.info(f"GPU memory before loading: {torch.cuda.memory_allocated() / 1024**3:.2f}GB")
+
                 model = SentenceTransformer(
                     model_name,
-                    cache_folder=settings.cache_dir
+                    cache_folder=settings.cache_dir,
+                    device=device
                 )
+
+                # GPU 최적화 설정 적용
+                if device == "cuda":
+                    model.to(device)
+                    if settings.torch_cudnn_benchmark:
+                        torch.backends.cudnn.benchmark = True
+                    logger.info(f"GPU memory after loading: {torch.cuda.memory_allocated() / 1024**3:.2f}GB")
+
                 self._models[model_name] = model
-                logger.info(f"Successfully loaded model: {model_name}")
+                logger.info(f"Successfully loaded model: {model_name} on {device}")
             except Exception as e:
                 logger.error(f"Failed to load model {model_name}: {str(e)}")
                 raise
@@ -64,28 +82,45 @@ class EmbeddingService:
         self._current_model = target_model
         return self._models[target_model]
 
-    def encode_texts(self, texts: List[str], model_name: Optional[str] = None) -> np.ndarray:
-        """Encode texts to embeddings."""
+    def encode_texts(self, texts: List[str], model_name: Optional[str] = None, batch_size: Optional[int] = None) -> np.ndarray:
+        """Encode texts to embeddings with optimized batch processing."""
         model = self.get_model(model_name)
         target_model = model_name or settings.default_model
 
+        # 배치 크기 최적화
+        if batch_size is None:
+            batch_size = min(settings.optimal_batch_size, len(texts))
+
         # Handle KoE5 prefix requirement
         if target_model == "nlpai-lab/KoE5":
-            # For KoE5, we need to add prefixes
-            # Assuming these are queries by default, but this could be configurable
             processed_texts = [f"query: {text}" for text in texts]
         else:
             processed_texts = texts
 
         try:
+            # GPU 메모리 모니터링
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             embeddings = model.encode(
                 processed_texts,
+                batch_size=batch_size,
                 convert_to_numpy=True,
-                normalize_embeddings=True
+                normalize_embeddings=True,
+                show_progress_bar=False,  # API에서는 진행바 비활성화
+                device=model.device if hasattr(model, 'device') else None
             )
+
+            # GPU 메모리 정리
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             return embeddings
         except Exception as e:
             logger.error(f"Failed to encode texts with model {target_model}: {str(e)}")
+            # GPU 메모리 정리 (오류 시에도)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             raise
 
     def calculate_similarity(self, texts: List[str], model_name: Optional[str] = None) -> np.ndarray:
@@ -109,6 +144,32 @@ class EmbeddingService:
             for model_id, info in self._model_info.items()
             if model_id in settings.available_models
         ]
+
+    def get_memory_info(self) -> dict:
+        """Get current memory usage information."""
+        info = {
+            "loaded_models": list(self._models.keys()),
+            "current_model": self._current_model
+        }
+
+        if torch.cuda.is_available():
+            info.update({
+                "gpu_available": True,
+                "gpu_memory_allocated": f"{torch.cuda.memory_allocated() / 1024**3:.2f}GB",
+                "gpu_memory_reserved": f"{torch.cuda.memory_reserved() / 1024**3:.2f}GB",
+                "gpu_memory_total": f"{torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f}GB",
+                "gpu_device_name": torch.cuda.get_device_name(0)
+            })
+        else:
+            info["gpu_available"] = False
+
+        return info
+
+    def cleanup_memory(self):
+        """Clean up GPU memory."""
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("GPU memory cache cleared")
 
     def is_model_loaded(self, model_name: Optional[str] = None) -> bool:
         """Check if a model is loaded."""

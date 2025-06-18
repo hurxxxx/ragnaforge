@@ -126,6 +126,19 @@ async def health_check():
     )
 
 
+@app.get("/memory")
+async def memory_info():
+    """Get memory usage information."""
+    return embedding_service.get_memory_info()
+
+
+@app.post("/memory/cleanup")
+async def cleanup_memory():
+    """Clean up GPU memory."""
+    embedding_service.cleanup_memory()
+    return {"status": "memory cleaned", "info": embedding_service.get_memory_info()}
+
+
 @app.get("/models", response_model=ModelsResponse)
 async def list_models():
     """List available models."""

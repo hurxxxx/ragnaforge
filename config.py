@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # API Limits
     max_batch_size: int = 150
-    optimal_batch_size: int = 10
+    optimal_batch_size: int = 128
     max_text_length: int = 8192
 
     # Security
