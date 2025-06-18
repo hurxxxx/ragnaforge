@@ -60,9 +60,12 @@
 git clone https://github.com/hurxxxx/ragnaforge.git
 cd ragnaforge
 
-# Conda 환경 활성화 (권장)
+# Python 3.11 환경 생성 (권장)
+conda create -n ragnaforge python=3.11
 conda activate ragnaforge
 ```
+
+> ⚠️ **중요**: Python 3.11 사용을 강력히 권장합니다. Python 3.13+에서는 일부 패키지 호환성 문제가 발생할 수 있습니다.
 
 ### 2. 의존성 설치
 ```bash
@@ -384,6 +387,27 @@ curl -H "Authorization: Bearer sk-ragnaforge-your-secret-key" \
 ### 문서 변환 도구
 - **Marker**: 고속 PDF 변환, 수식 및 표 지원
 - **Docling**: 다중 형식 지원, 고품질 레이아웃 보존
+
+## 💻 시스템 요구사항
+
+### Python 버전
+- **Python 3.11** (강력히 권장)
+- Python 3.10 (지원됨)
+- Python 3.12 (대부분 지원됨)
+- ⚠️ Python 3.13+ (일부 패키지 호환성 문제 가능)
+
+### 하드웨어 요구사항
+- **메모리**: 최소 8GB RAM (16GB 권장)
+- **저장공간**: 10GB+ 여유 공간
+- **GPU**: NVIDIA GPU (선택사항, 성능 향상)
+  - RTX 3090: 최적 성능
+  - RTX 4090: 최고 성능
+  - CUDA 11.8+ 지원
+
+### 운영체제
+- Linux (Ubuntu 20.04+ 권장)
+- macOS (Intel/Apple Silicon)
+- Windows 10/11
 
 ## 🧪 테스트
 
