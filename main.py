@@ -4,7 +4,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from typing import List
-from fastapi import FastAPI, HTTPException, Depends, status, Header
+from fastapi import FastAPI, HTTPException, Depends, status, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -16,11 +16,15 @@ from models import (
     ModelsResponse, ModelInfo,
     HealthResponse, ErrorResponse,
     ChunkRequest, ChunkResponse, ChunkData,
-    DocumentConversionRequest, DocumentConversionResponse, ConversionComparisonResponse
+    DocumentConversionRequest, DocumentConversionResponse, ConversionComparisonResponse,
+    FileUploadResponse, DocumentProcessRequest, DocumentProcessResponse
 )
 from services import embedding_service, chunking_service
 from services.marker_service import marker_service
 from services.docling_service import docling_service
+from services.file_upload_service import file_upload_service
+from services.document_processing_service import document_processing_service
+from services.database_service import database_service
 
 # Configure logging
 logging.basicConfig(
@@ -51,6 +55,10 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down KURE API service...")
     try:
+        # Clean up old uploaded files
+        file_upload_service.cleanup_old_files(max_age_hours=24)
+
+        # Clean up memory
         embedding_service.cleanup_memory()
         logger.info("🛑 Resources cleaned up successfully")
     except Exception as e:
@@ -412,6 +420,134 @@ async def compare_conversions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Conversion comparison failed: {str(e)}"
+        )
+
+
+@app.post("/v1/upload", response_model=FileUploadResponse)
+async def upload_file(
+    file: UploadFile = File(...),
+    authorization: str = Depends(verify_api_key)
+):
+    """Upload a file for processing."""
+    try:
+        result = await file_upload_service.upload_file(file)
+        return FileUploadResponse(**result)
+    except Exception as e:
+        logger.error(f"Error in file upload: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"File upload failed: {str(e)}"
+        )
+
+
+@app.post("/v1/process", response_model=DocumentProcessResponse)
+async def process_document(
+    request: DocumentProcessRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Process uploaded document through the full pipeline."""
+    try:
+        result = await document_processing_service.process_document(
+            file_id=request.file_id,
+            conversion_method=request.conversion_method,
+            extract_images=request.extract_images,
+            chunk_strategy=request.chunk_strategy,
+            chunk_size=request.chunk_size,
+            overlap=request.overlap,
+            generate_embeddings=request.generate_embeddings,
+            embedding_model=request.embedding_model
+        )
+        return DocumentProcessResponse(**result)
+    except Exception as e:
+        logger.error(f"Error in document processing: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Document processing failed: {str(e)}"
+        )
+
+
+@app.get("/v1/documents")
+async def list_documents(
+    page: int = 1,
+    page_size: int = 100,
+    authorization: str = Depends(verify_api_key)
+):
+    """List all processed documents with pagination."""
+    try:
+        if page < 1:
+            page = 1
+        if page_size < 1 or page_size > 1000:
+            page_size = 100
+
+        result = document_processing_service.list_documents(page, page_size)
+        return result
+    except Exception as e:
+        logger.error(f"Error listing documents: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list documents: {str(e)}"
+        )
+
+
+@app.get("/v1/documents/{document_id}")
+async def get_document(
+    document_id: str,
+    authorization: str = Depends(verify_api_key)
+):
+    """Get processed document by ID."""
+    try:
+        document = document_processing_service.get_document(document_id)
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document not found: {document_id}"
+            )
+        return document
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting document {document_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get document: {str(e)}"
+        )
+
+
+@app.delete("/v1/files/{file_id}")
+async def delete_file(
+    file_id: str,
+    authorization: str = Depends(verify_api_key)
+):
+    """Delete uploaded file."""
+    try:
+        success = file_upload_service.delete_file(file_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"File not found: {file_id}"
+            )
+        return {"success": True, "message": f"File {file_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting file {file_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete file: {str(e)}"
+        )
+
+
+@app.get("/v1/stats")
+async def get_database_stats(authorization: str = Depends(verify_api_key)):
+    """Get database statistics."""
+    try:
+        stats = database_service.get_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting database stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get database stats: {str(e)}"
         )
 
 

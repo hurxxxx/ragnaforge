@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     cuda_visible_devices: str = "0"
     torch_cudnn_benchmark: bool = True
 
+    # Qdrant Vector Database Settings
+    qdrant_api_key: Optional[str] = None
+    qdrant_host: str = "localhost"
+    qdrant_port: int = 6333
+    qdrant_collection_name: str = "ragnaforge_documents"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

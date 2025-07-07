@@ -2,6 +2,7 @@
 
 from typing import List, Optional, Union, Dict, Any
 from pydantic import BaseModel, Field, validator
+from enum import Enum
 from config import settings
 
 
@@ -255,3 +256,80 @@ class ConversionComparisonResponse(BaseModel):
     marker_result: DocumentConversionResponse = Field(..., description="Marker conversion result")
     docling_result: DocumentConversionResponse = Field(..., description="Docling conversion result")
     comparison: Dict[str, Any] = Field(..., description="Performance comparison metrics")
+
+
+# File Upload Models
+class SupportedFileType(str, Enum):
+    """Supported file types for upload."""
+    PDF = "pdf"
+    DOCX = "docx"
+    PPTX = "pptx"
+    TXT = "txt"
+    MD = "md"
+
+
+class FileUploadResponse(BaseModel):
+    """Response for file upload."""
+
+    success: bool = Field(..., description="Whether the upload was successful")
+    file_id: str = Field(..., description="Unique identifier for the uploaded file")
+    filename: str = Field(..., description="Original filename")
+    file_type: SupportedFileType = Field(..., description="Detected file type")
+    file_size: int = Field(..., description="File size in bytes")
+    upload_time: float = Field(..., description="Time taken to upload and process")
+    temp_path: str = Field(..., description="Temporary file path")
+    error: Optional[str] = Field(None, description="Error message if upload failed")
+
+
+class DocumentProcessRequest(BaseModel):
+    """Request for processing uploaded document."""
+
+    file_id: str = Field(..., description="File ID from upload response")
+    conversion_method: Optional[str] = Field(
+        "auto",
+        description="Conversion method: 'marker', 'docling', or 'auto'",
+        example="auto"
+    )
+    extract_images: bool = Field(False, description="Whether to extract images")
+    chunk_strategy: Optional[str] = Field(
+        None,
+        description="Text chunking strategy",
+        example="recursive"
+    )
+    chunk_size: Optional[int] = Field(
+        None,
+        description="Chunk size for text splitting",
+        example=380
+    )
+    overlap: Optional[int] = Field(
+        None,
+        description="Overlap size between chunks",
+        example=70
+    )
+    generate_embeddings: bool = Field(
+        True,
+        description="Whether to generate embeddings for chunks"
+    )
+    embedding_model: Optional[str] = Field(
+        None,
+        description="Model to use for embeddings",
+        example="nlpai-lab/KURE-v1"
+    )
+
+
+class DocumentProcessResponse(BaseModel):
+    """Response for document processing."""
+
+    success: bool = Field(..., description="Whether processing was successful")
+    file_id: str = Field(..., description="File ID")
+    document_id: str = Field(..., description="Unique document identifier")
+    filename: str = Field(..., description="Original filename")
+    conversion_method: str = Field(..., description="Conversion method used")
+    conversion_time: float = Field(..., description="Time taken for conversion")
+    markdown_content: str = Field(..., description="Converted markdown content")
+    markdown_length: int = Field(..., description="Length of markdown content")
+    total_chunks: int = Field(..., description="Number of text chunks created")
+    chunks: List[Dict[str, Any]] = Field(..., description="Text chunks with metadata")
+    embeddings_generated: bool = Field(..., description="Whether embeddings were generated")
+    processing_time: float = Field(..., description="Total processing time")
+    error: Optional[str] = Field(None, description="Error message if processing failed")

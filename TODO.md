@@ -42,7 +42,7 @@
 ### 2. 💾 데이터베이스 통합
 **현재 상태**: 완전 미구현
 **필요 작업**:
-- [ ] Vector Database 서비스 (Chroma/Qdrant/Weaviate)
+- [ ] Vector Database 서비스 (Qdrant 우선)
 - [ ] Fulltext Search 서비스 (Elasticsearch/PostgreSQL FTS)
 - [ ] 문서 메타데이터 저장
 - [ ] 청크 저장 및 관리
@@ -141,7 +141,7 @@
 
 ### Sprint 1: 핵심 RAG 기능 (1-2주)
 1. 파일 업로드 API 구현
-2. Vector Database 통합 (Chroma 우선)
+2. Vector Database 통합 (Qdrant 우선)
 3. 기본 검색 API 구현
 
 ### Sprint 2: 하이브리드 검색 (1주)
