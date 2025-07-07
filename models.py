@@ -277,7 +277,9 @@ class FileUploadResponse(BaseModel):
     file_type: SupportedFileType = Field(..., description="Detected file type")
     file_size: int = Field(..., description="File size in bytes")
     upload_time: float = Field(..., description="Time taken to upload and process")
-    temp_path: str = Field(..., description="Temporary file path")
+    temp_path: str = Field(..., description="File storage path")
+    storage_path: Optional[str] = Field(None, description="Organized storage path")
+    relative_path: Optional[str] = Field(None, description="Relative path from storage base")
     error: Optional[str] = Field(None, description="Error message if upload failed")
 
 
@@ -388,3 +390,49 @@ class QdrantStatsResponse(BaseModel):
     status: str = Field(..., description="Collection status")
     disk_data_size: int = Field(..., description="Disk data size in bytes")
     ram_data_size: int = Field(..., description="RAM data size in bytes")
+
+
+# Storage Management Models
+class StorageStatsResponse(BaseModel):
+    """Response for storage statistics."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    stats: Dict[str, Any] = Field(..., description="Storage statistics")
+
+
+class StorageFileInfo(BaseModel):
+    """Information about a stored file."""
+
+    name: str = Field(..., description="File name")
+    path: str = Field(..., description="File path")
+    size: int = Field(..., description="File size in bytes")
+    created: str = Field(..., description="Creation timestamp")
+    modified: str = Field(..., description="Modification timestamp")
+    is_file: bool = Field(..., description="Whether it's a file")
+    is_dir: bool = Field(..., description="Whether it's a directory")
+    relative_path: Optional[str] = Field(None, description="Relative path from storage base")
+
+
+class StorageFilesResponse(BaseModel):
+    """Response for listing storage files."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    directory_type: str = Field(..., description="Directory type")
+    file_type: Optional[str] = Field(None, description="File type filter")
+    files: List[StorageFileInfo] = Field(..., description="List of files")
+    count: int = Field(..., description="Number of files")
+
+
+class StorageCleanupResponse(BaseModel):
+    """Response for storage cleanup."""
+
+    success: bool = Field(..., description="Whether the cleanup was successful")
+    deleted_count: int = Field(..., description="Number of files deleted")
+    max_age_hours: int = Field(..., description="Maximum age in hours for cleanup")
+
+
+class FileInfoResponse(BaseModel):
+    """Response for file information."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    file_info: Dict[str, Any] = Field(..., description="File information")

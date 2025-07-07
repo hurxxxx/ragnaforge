@@ -3,7 +3,7 @@
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, status, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -18,7 +18,8 @@ from models import (
     ChunkRequest, ChunkResponse, ChunkData,
     DocumentConversionRequest, DocumentConversionResponse, ConversionComparisonResponse,
     FileUploadResponse, DocumentProcessRequest, DocumentProcessResponse,
-    VectorSearchRequest, VectorSearchResponse, QdrantStatsResponse
+    VectorSearchRequest, VectorSearchResponse, QdrantStatsResponse,
+    StorageStatsResponse, StorageFilesResponse, StorageCleanupResponse, FileInfoResponse
 )
 from services import embedding_service, chunking_service
 from services.marker_service import marker_service
@@ -28,6 +29,7 @@ from services.document_processing_service import document_processing_service
 from services.database_service import database_service
 from services.qdrant_service import qdrant_service
 from services.search_service import search_service
+from services.storage_service import storage_service
 
 # Configure logging
 logging.basicConfig(
@@ -633,6 +635,96 @@ async def get_search_stats(authorization: str = Depends(verify_api_key)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get search stats: {str(e)}"
+        )
+
+
+# Storage Management Endpoints
+
+@app.get("/v1/storage/stats", response_model=StorageStatsResponse)
+async def get_storage_stats(authorization: str = Depends(verify_api_key)):
+    """Get storage usage statistics."""
+    try:
+        stats = storage_service.get_storage_stats()
+        return {
+            "success": True,
+            "stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Error getting storage stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get storage stats: {str(e)}"
+        )
+
+
+@app.get("/v1/storage/files/{directory_type}", response_model=StorageFilesResponse)
+async def list_storage_files(
+    directory_type: str,
+    file_type: Optional[str] = None,
+    authorization: str = Depends(verify_api_key)
+):
+    """List files in storage directory."""
+    try:
+        if directory_type not in ["uploads", "processed", "temp"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid directory type. Must be 'uploads', 'processed', or 'temp'"
+            )
+
+        files = storage_service.list_files(directory_type, file_type)
+        return {
+            "success": True,
+            "directory_type": directory_type,
+            "file_type": file_type,
+            "files": files,
+            "count": len(files)
+        }
+    except Exception as e:
+        logger.error(f"Error listing storage files: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list storage files: {str(e)}"
+        )
+
+
+@app.post("/v1/storage/cleanup", response_model=StorageCleanupResponse)
+async def cleanup_temp_files(
+    max_age_hours: int = 24,
+    authorization: str = Depends(verify_api_key)
+):
+    """Clean up temporary files older than specified hours."""
+    try:
+        deleted_count = storage_service.cleanup_temp_files(max_age_hours)
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "max_age_hours": max_age_hours
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up temp files: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cleanup temp files: {str(e)}"
+        )
+
+
+@app.get("/v1/storage/file-info", response_model=FileInfoResponse)
+async def get_file_info(
+    file_path: str,
+    authorization: str = Depends(verify_api_key)
+):
+    """Get information about a specific file."""
+    try:
+        file_info = storage_service.get_file_info(file_path)
+        return {
+            "success": True,
+            "file_info": file_info
+        }
+    except Exception as e:
+        logger.error(f"Error getting file info: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get file info: {str(e)}"
         )
 
 

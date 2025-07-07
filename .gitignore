@@ -153,3 +153,6 @@ tmp/
 temp/
 
 test_outputs/
+
+# Runtime data and storage
+data/

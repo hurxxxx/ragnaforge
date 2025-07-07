@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 from fastapi import UploadFile, HTTPException
 from models import SupportedFileType
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +17,14 @@ logger = logging.getLogger(__name__)
 class FileUploadService:
     """Service for handling file uploads and management."""
 
-    def __init__(self, upload_dir: str = "uploads", max_file_size: int = 50 * 1024 * 1024):  # 50MB
-        self.upload_dir = Path(upload_dir)
-        self.max_file_size = max_file_size
+    def __init__(self):
+        # Use settings for configuration
+        self.max_file_size = settings.max_file_size_mb * 1024 * 1024  # Convert MB to bytes
+        self.temp_dir = Path(settings.storage_base_path) / settings.temp_dir / "uploads"
 
-        # Create upload directory if it doesn't exist
-        self.upload_dir.mkdir(exist_ok=True)
-        logger.info(f"File upload service initialized with upload_dir: {self.upload_dir}")
+        # Create temp directory if it doesn't exist
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"File upload service initialized with temp_dir: {self.temp_dir}")
     
     def _get_file_type(self, filename: str) -> Optional[SupportedFileType]:
         """Determine file type from filename extension."""
@@ -54,7 +56,7 @@ class FileUploadService:
     async def upload_file(self, file: UploadFile) -> Dict:
         """Upload and store file."""
         start_time = time.time()
-        
+
         try:
             # Validate file
             is_valid, error_msg = self._validate_file(file)
@@ -64,44 +66,55 @@ class FileUploadService:
                     "error": error_msg,
                     "upload_time": time.time() - start_time
                 }
-            
+
             # Generate unique file ID
             file_id = str(uuid.uuid4())
             file_type = self._get_file_type(file.filename)
+
+            # Create temporary filename for initial upload
+            temp_filename = f"{file_id}_{file.filename}"
+            temp_file_path = self.temp_dir / temp_filename
             
-            # Create safe filename
-            safe_filename = f"{file_id}_{file.filename}"
-            file_path = self.upload_dir / safe_filename
-            
-            # Save file
+            # Save file to temporary location first
             file_size = 0
-            with open(file_path, "wb") as buffer:
+            with open(temp_file_path, "wb") as buffer:
                 content = await file.read()
                 file_size = len(content)
-                
+
                 # Check file size after reading
                 if file_size > self.max_file_size:
                     # Clean up
-                    if file_path.exists():
-                        file_path.unlink()
+                    if temp_file_path.exists():
+                        temp_file_path.unlink()
                     return {
                         "success": False,
                         "error": f"File size ({file_size / (1024*1024):.1f}MB) exceeds maximum limit of {self.max_file_size / (1024*1024):.1f}MB",
                         "upload_time": time.time() - start_time
                     }
-                
+
                 buffer.write(content)
             
+            # Move file to organized storage using storage service
+            from services.storage_service import storage_service
+            storage_info = storage_service.store_uploaded_file(
+                file_id=file_id,
+                filename=file.filename,
+                file_type=file_type.value,
+                temp_file_path=str(temp_file_path)
+            )
+
             upload_time = time.time() - start_time
-            
+
             # Store file metadata
             file_metadata = {
                 "file_id": file_id,
                 "filename": file.filename,
-                "safe_filename": safe_filename,
+                "safe_filename": storage_info["safe_filename"],
                 "file_type": file_type,
                 "file_size": file_size,
-                "temp_path": str(file_path),
+                "temp_path": storage_info["storage_path"],  # Now points to organized storage
+                "storage_path": storage_info["storage_path"],
+                "relative_path": storage_info["relative_path"],
                 "upload_time": upload_time,
                 "created_at": time.time()
             }
@@ -119,7 +132,9 @@ class FileUploadService:
                 "file_type": file_type,
                 "file_size": file_size,
                 "upload_time": upload_time,
-                "temp_path": str(file_path)
+                "temp_path": storage_info["storage_path"],  # Return organized storage path
+                "storage_path": storage_info["storage_path"],
+                "relative_path": storage_info["relative_path"]
             }
             
         except Exception as e:
@@ -139,7 +154,9 @@ class FileUploadService:
         """Get file path by ID."""
         file_info = self.get_file_info(file_id)
         if file_info:
-            return Path(file_info["temp_path"])
+            # Try storage_path first, fallback to temp_path for backward compatibility
+            path = file_info.get("storage_path") or file_info.get("temp_path")
+            return Path(path) if path else None
         return None
     
     def delete_file(self, file_id: str) -> bool:
@@ -149,10 +166,11 @@ class FileUploadService:
             if not file_info:
                 return False
 
-            # Delete physical file
-            file_path = Path(file_info["temp_path"])
-            if file_path.exists():
-                file_path.unlink()
+            # Delete physical file using storage service
+            from services.storage_service import storage_service
+            file_path = file_info.get("storage_path") or file_info.get("temp_path")
+            if file_path:
+                storage_service.delete_file(file_path)
 
             # Remove from database
             from services.database_service import database_service

@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     qdrant_port: int = 6333
     qdrant_collection_name: str = "ragnaforge_documents"
 
+    # Storage Configuration
+    storage_base_path: str = "./data/storage"
+    upload_dir: str = "uploads"
+    processed_dir: str = "processed"
+    temp_dir: str = "temp"
+    max_file_size_mb: int = 50
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

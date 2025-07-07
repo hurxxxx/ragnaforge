@@ -60,11 +60,23 @@ class DatabaseService:
                     file_type TEXT NOT NULL,
                     file_size INTEGER NOT NULL,
                     temp_path TEXT NOT NULL,
+                    storage_path TEXT,
+                    relative_path TEXT,
                     upload_time REAL NOT NULL,
                     created_at REAL NOT NULL,
                     status TEXT DEFAULT 'uploaded'
                 )
             """)
+
+            # Add new columns if they don't exist (for backward compatibility)
+            try:
+                conn.execute("ALTER TABLE files ADD COLUMN storage_path TEXT")
+            except:
+                pass  # Column already exists
+            try:
+                conn.execute("ALTER TABLE files ADD COLUMN relative_path TEXT")
+            except:
+                pass  # Column already exists
             
             # Documents table for processed documents
             conn.execute("""
@@ -76,6 +88,8 @@ class DatabaseService:
                     conversion_method TEXT NOT NULL,
                     conversion_time REAL NOT NULL,
                     markdown_content TEXT,
+                    markdown_storage_path TEXT,
+                    chunks_storage_path TEXT,
                     markdown_length INTEGER NOT NULL,
                     total_chunks INTEGER NOT NULL,
                     embeddings_generated BOOLEAN NOT NULL,
@@ -85,6 +99,16 @@ class DatabaseService:
                     FOREIGN KEY (file_id) REFERENCES files (id)
                 )
             """)
+
+            # Add new columns if they don't exist (for backward compatibility)
+            try:
+                conn.execute("ALTER TABLE documents ADD COLUMN markdown_storage_path TEXT")
+            except:
+                pass  # Column already exists
+            try:
+                conn.execute("ALTER TABLE documents ADD COLUMN chunks_storage_path TEXT")
+            except:
+                pass  # Column already exists
             
             # Document chunks table
             conn.execute("""
@@ -127,9 +151,9 @@ class DatabaseService:
         try:
             with self.get_connection() as conn:
                 conn.execute("""
-                    INSERT INTO files 
-                    (id, filename, safe_filename, file_type, file_size, temp_path, upload_time, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO files
+                    (id, filename, safe_filename, file_type, file_size, temp_path, storage_path, relative_path, upload_time, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     file_data["file_id"],
                     file_data["filename"],
@@ -137,6 +161,8 @@ class DatabaseService:
                     file_data["file_type"],
                     file_data["file_size"],
                     file_data["temp_path"],
+                    file_data.get("storage_path"),
+                    file_data.get("relative_path"),
                     file_data["upload_time"],
                     file_data["created_at"]
                 ))
@@ -212,11 +238,11 @@ class DatabaseService:
             with self.get_connection() as conn:
                 # Store document
                 conn.execute("""
-                    INSERT INTO documents 
+                    INSERT INTO documents
                     (id, file_id, filename, file_type, conversion_method, conversion_time,
-                     markdown_content, markdown_length, total_chunks, embeddings_generated,
+                     markdown_content, markdown_storage_path, chunks_storage_path, markdown_length, total_chunks, embeddings_generated,
                      processing_time, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     document_data["document_id"],
                     document_data["file_id"],
@@ -225,6 +251,8 @@ class DatabaseService:
                     document_data["conversion_method"],
                     document_data.get("conversion_time", 0),
                     document_data.get("markdown_content", ""),
+                    document_data.get("markdown_storage_path"),
+                    document_data.get("chunks_storage_path"),
                     len(document_data.get("markdown_content", "")),
                     len(document_data.get("chunks", [])),
                     document_data.get("embeddings_generated", False),

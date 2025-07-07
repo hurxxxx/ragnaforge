@@ -23,6 +23,12 @@
 - **MCP 지원**: Model Context Protocol 지원으로 AI 모델과의 원활한 통합
 - **RESTful API**: 표준 REST 엔드포인트 제공
 
+### 📁 체계적인 파일 관리
+- **구조화된 저장소**: 파일 타입별 자동 분류 및 체계적 저장
+- **환경 변수 설정**: 저장 경로를 환경 변수로 유연하게 관리
+- **메타데이터 추적**: 업로드/변환된 파일의 상세 정보 관리
+- **자동 정리**: 임시 파일 자동 정리 및 저장 공간 최적화
+
 ### 🌐 확장 가능성
 - **웹 크롤링**: 향후 웹 콘텐츠 자동 수집 기능
 - **공공 데이터 연계**: 외부 공공 데이터 API와의 통합
@@ -193,6 +199,50 @@ POST /rerank
 
 검색 결과의 관련성을 재평가하여 정확도를 향상시킵니다.
 
+### 📁 Storage Management
+```http
+GET /v1/storage/stats
+```
+
+저장소 사용량 통계를 조회합니다.
+
+**응답:**
+```json
+{
+  "success": true,
+  "stats": {
+    "base_path": "data/storage",
+    "total_size": 12413747,
+    "directories": {
+      "uploads": {
+        "path": "data/storage/uploads",
+        "total_size": 84738,
+        "file_count": 1,
+        "size_mb": 0.08
+      },
+      "processed": {
+        "path": "data/storage/processed",
+        "total_size": 12329009,
+        "file_count": 2,
+        "size_mb": 11.76
+      }
+    }
+  }
+}
+```
+
+```http
+GET /v1/storage/files/{directory_type}
+```
+
+특정 디렉토리의 파일 목록을 조회합니다.
+
+**요청:**
+```bash
+curl -X GET "http://localhost:8000/v1/storage/files/uploads" \
+     -H "Authorization: Bearer sk-kure-v1-test-key-12345"
+```
+
 **요청 본문:**
 ```json
 {
@@ -344,6 +394,13 @@ cp .env.example .env
 - `CACHE_DIR`: 모델 캐시 디렉토리 (./models)
 - `LOG_LEVEL`: 로깅 레벨 (INFO)
 
+### 📁 Storage 설정
+- `STORAGE_BASE_PATH`: 기본 저장소 경로 (./data/storage)
+- `UPLOAD_DIR`: 업로드 파일 디렉토리 (uploads)
+- `PROCESSED_DIR`: 처리된 파일 디렉토리 (processed)
+- `TEMP_DIR`: 임시 파일 디렉토리 (temp)
+- `MAX_FILE_SIZE_MB`: 최대 파일 크기 (50MB)
+
 ### 문서 변환 설정
 - `MARKER_ENABLED`: Marker 변환기 활성화 (true/false)
 - `DOCLING_ENABLED`: Docling 변환기 활성화 (true/false)
@@ -424,6 +481,24 @@ python tests/test_document_conversion_comparison.py
 서비스 실행 후 다음 주소에서 확인:
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
+
+### 주요 API 엔드포인트
+
+#### 📁 Storage Management API
+- `GET /v1/storage/stats` - 저장소 사용량 통계
+- `GET /v1/storage/files/{directory_type}` - 디렉토리별 파일 목록
+- `POST /v1/storage/cleanup` - 임시 파일 정리
+- `GET /v1/storage/file-info` - 특정 파일 정보 조회
+
+#### 📄 Document Processing API
+- `POST /v1/upload` - 파일 업로드
+- `POST /v1/process` - 문서 처리 및 임베딩 생성
+- `POST /v1/search` - 하이브리드 검색
+
+#### 🔍 Search & Embedding API
+- `POST /v1/embeddings` - 텍스트 임베딩 생성
+- `POST /v1/similarity` - 텍스트 유사도 계산
+- `GET /v1/qdrant/stats` - Vector DB 통계
 
 ## 📄 라이선스
 

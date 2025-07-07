@@ -227,8 +227,29 @@ class DocumentProcessingService:
             
             # Generate document ID
             document_id = str(uuid.uuid4())
-            
-            # Store processed document
+
+            # Store processed content using storage service
+            from services.storage_service import storage_service
+
+            # Store markdown content
+            markdown_storage = storage_service.store_processed_content(
+                file_id=file_id,
+                content_type="markdown",
+                content=markdown_content,
+                filename=f"{document_id}_converted.md"
+            )
+
+            # Store chunks as JSON
+            import json
+            chunks_json = json.dumps(chunks, ensure_ascii=False, indent=2)
+            chunks_storage = storage_service.store_processed_content(
+                file_id=file_id,
+                content_type="chunks",
+                content=chunks_json,
+                filename=f"{document_id}_chunks.json"
+            )
+
+            # Store processed document metadata
             processed_doc = {
                 "document_id": document_id,
                 "file_id": file_id,
@@ -237,7 +258,9 @@ class DocumentProcessingService:
                 "conversion_method": method,
                 "conversion_time": conversion_result["conversion_time"],
                 "markdown_content": markdown_content,
+                "markdown_storage_path": markdown_storage["storage_path"],
                 "chunks": chunks,
+                "chunks_storage_path": chunks_storage["storage_path"],
                 "embeddings_generated": embeddings_generated,
                 "processing_time": time.time() - start_time,
                 "created_at": time.time()
