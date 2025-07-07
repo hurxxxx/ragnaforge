@@ -246,6 +246,31 @@ class DocumentProcessingService:
             # Store in database
             from services.database_service import database_service
             database_service.store_document(processed_doc)
+
+            # Store in Qdrant if embeddings were generated
+            if embeddings_generated and chunks:
+                try:
+                    from services.qdrant_service import qdrant_service
+                    qdrant_metadata = {
+                        "filename": file_info["filename"],
+                        "file_type": file_type,
+                        "conversion_method": method,
+                        "created_at": time.time(),
+                        "embedding_model": embedding_model
+                    }
+
+                    qdrant_success = qdrant_service.store_document_chunks(
+                        document_id, chunks, qdrant_metadata
+                    )
+
+                    if qdrant_success:
+                        logger.info(f"Document chunks stored in Qdrant: {document_id}")
+                    else:
+                        logger.warning(f"Failed to store chunks in Qdrant: {document_id}")
+
+                except Exception as e:
+                    logger.error(f"Error storing in Qdrant: {str(e)}")
+                    # Don't fail the whole process if Qdrant fails
             
             logger.info(f"Document processed successfully: {file_info['filename']} -> {document_id}")
             

@@ -17,7 +17,8 @@ from models import (
     HealthResponse, ErrorResponse,
     ChunkRequest, ChunkResponse, ChunkData,
     DocumentConversionRequest, DocumentConversionResponse, ConversionComparisonResponse,
-    FileUploadResponse, DocumentProcessRequest, DocumentProcessResponse
+    FileUploadResponse, DocumentProcessRequest, DocumentProcessResponse,
+    VectorSearchRequest, VectorSearchResponse, QdrantStatsResponse
 )
 from services import embedding_service, chunking_service
 from services.marker_service import marker_service
@@ -25,6 +26,8 @@ from services.docling_service import docling_service
 from services.file_upload_service import file_upload_service
 from services.document_processing_service import document_processing_service
 from services.database_service import database_service
+from services.qdrant_service import qdrant_service
+from services.search_service import search_service
 
 # Configure logging
 logging.basicConfig(
@@ -42,12 +45,21 @@ async def lifespan(app: FastAPI):
     start_time = time.time()
 
     try:
+        # Load embedding model
         embedding_service.load_model(settings.default_model)
+
+        # Initialize Qdrant (already done in service init, but verify connection)
+        qdrant_health = qdrant_service.health_check()
+        if qdrant_health.get("connected"):
+            logger.info(f"✅ Qdrant connected: {qdrant_health.get('total_collections', 0)} collections")
+        else:
+            logger.warning(f"⚠️ Qdrant connection issue: {qdrant_health.get('error', 'Unknown')}")
+
         startup_time = time.time() - start_time
         logger.info(f"Default model {settings.default_model} loaded successfully in {startup_time:.2f}s")
         logger.info("🚀 KURE API service is ready!")
     except Exception as e:
-        logger.error(f"Failed to load default model: {str(e)}")
+        logger.error(f"Failed to initialize services: {str(e)}")
         raise  # This will prevent the application from starting
 
     yield  # Application runs here
@@ -548,6 +560,79 @@ async def get_database_stats(authorization: str = Depends(verify_api_key)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get database stats: {str(e)}"
+        )
+
+
+@app.post("/v1/search", response_model=VectorSearchResponse)
+async def vector_search(
+    request: VectorSearchRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Perform vector similarity search across document chunks."""
+    try:
+        result = await search_service.vector_search(
+            query=request.query,
+            limit=request.limit,
+            score_threshold=request.score_threshold,
+            document_filter=request.document_filter,
+            embedding_model=request.embedding_model
+        )
+        return VectorSearchResponse(**result)
+    except Exception as e:
+        logger.error(f"Error in vector search: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Vector search failed: {str(e)}"
+        )
+
+
+@app.get("/v1/qdrant/stats")
+async def get_qdrant_stats(authorization: str = Depends(verify_api_key)):
+    """Get Qdrant collection statistics."""
+    try:
+        stats = qdrant_service.get_collection_stats()
+        if not stats:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Qdrant service unavailable"
+            )
+        return stats
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting Qdrant stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get Qdrant stats: {str(e)}"
+        )
+
+
+@app.get("/v1/qdrant/health")
+async def get_qdrant_health(authorization: str = Depends(verify_api_key)):
+    """Check Qdrant service health."""
+    try:
+        health = qdrant_service.health_check()
+        return health
+    except Exception as e:
+        logger.error(f"Error checking Qdrant health: {str(e)}")
+        return {
+            "status": "error",
+            "connected": False,
+            "error": str(e)
+        }
+
+
+@app.get("/v1/search/stats")
+async def get_search_stats(authorization: str = Depends(verify_api_key)):
+    """Get comprehensive search service statistics."""
+    try:
+        stats = search_service.get_search_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting search stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get search stats: {str(e)}"
         )
 
 

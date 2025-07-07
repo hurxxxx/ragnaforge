@@ -333,3 +333,58 @@ class DocumentProcessResponse(BaseModel):
     embeddings_generated: bool = Field(..., description="Whether embeddings were generated")
     processing_time: float = Field(..., description="Total processing time")
     error: Optional[str] = Field(None, description="Error message if processing failed")
+
+
+# Vector Search Models
+class VectorSearchRequest(BaseModel):
+    """Request for vector similarity search."""
+
+    query: str = Field(..., description="Search query text")
+    limit: int = Field(10, description="Maximum number of results", ge=1, le=100)
+    score_threshold: float = Field(0.0, description="Minimum similarity score", ge=0.0, le=1.0)
+    document_filter: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Filter by document properties",
+        example={"file_types": ["pdf"], "document_ids": ["doc1", "doc2"]}
+    )
+    embedding_model: Optional[str] = Field(
+        None,
+        description="Model to use for query embedding",
+        example="nlpai-lab/KURE-v1"
+    )
+
+
+class SearchResult(BaseModel):
+    """Individual search result."""
+
+    id: str = Field(..., description="Chunk ID")
+    score: float = Field(..., description="Similarity score")
+    document_id: str = Field(..., description="Source document ID")
+    chunk_index: int = Field(..., description="Chunk index in document")
+    text: str = Field(..., description="Chunk text content")
+    filename: str = Field(..., description="Source filename")
+    file_type: str = Field(..., description="Source file type")
+    metadata: Dict[str, Any] = Field(..., description="Additional metadata")
+
+
+class VectorSearchResponse(BaseModel):
+    """Response for vector similarity search."""
+
+    success: bool = Field(..., description="Whether search was successful")
+    query: str = Field(..., description="Original search query")
+    total_results: int = Field(..., description="Number of results found")
+    search_time: float = Field(..., description="Time taken for search")
+    results: List[SearchResult] = Field(..., description="Search results")
+    error: Optional[str] = Field(None, description="Error message if search failed")
+
+
+class QdrantStatsResponse(BaseModel):
+    """Response for Qdrant statistics."""
+
+    collection_name: str = Field(..., description="Collection name")
+    points_count: int = Field(..., description="Total number of points")
+    vectors_count: int = Field(..., description="Total number of vectors")
+    indexed_vectors_count: int = Field(..., description="Number of indexed vectors")
+    status: str = Field(..., description="Collection status")
+    disk_data_size: int = Field(..., description="Disk data size in bytes")
+    ram_data_size: int = Field(..., description="RAM data size in bytes")
