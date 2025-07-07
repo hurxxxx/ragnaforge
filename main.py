@@ -2,6 +2,7 @@
 
 import logging
 import time
+from contextlib import asynccontextmanager
 from typing import List
 from fastapi import FastAPI, HTTPException, Depends, status, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +29,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan events."""
+    # Startup
+    logger.info("Starting KURE API service...")
+    start_time = time.time()
+
+    try:
+        embedding_service.load_model(settings.default_model)
+        startup_time = time.time() - start_time
+        logger.info(f"Default model {settings.default_model} loaded successfully in {startup_time:.2f}s")
+        logger.info("🚀 KURE API service is ready!")
+    except Exception as e:
+        logger.error(f"Failed to load default model: {str(e)}")
+        raise  # This will prevent the application from starting
+
+    yield  # Application runs here
+
+    # Shutdown
+    logger.info("Shutting down KURE API service...")
+    try:
+        embedding_service.cleanup_memory()
+        logger.info("🛑 Resources cleaned up successfully")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {str(e)}")
+
+
 # Create FastAPI app
 app = FastAPI(
     title=settings.app_name,
@@ -35,7 +64,8 @@ app = FastAPI(
     version=settings.app_version,
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -103,17 +133,6 @@ async def verify_api_key(authorization: str = Header(None)):
             )
 
     return authorization
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Load default model on startup."""
-    logger.info("Starting KURE API service...")
-    try:
-        embedding_service.load_model(settings.default_model)
-        logger.info(f"Default model {settings.default_model} loaded successfully")
-    except Exception as e:
-        logger.error(f"Failed to load default model: {str(e)}")
 
 
 @app.get("/health", response_model=HealthResponse)
