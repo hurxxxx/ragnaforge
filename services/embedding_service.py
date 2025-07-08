@@ -19,6 +19,12 @@ class EmbeddingService:
         self._models: Dict[str, SentenceTransformer] = {}
         self._current_model: Optional[str] = None
         self._model_info = {
+            "dragonkue/snowflake-arctic-embed-l-v2.0-ko": {
+                "id": "dragonkue/snowflake-arctic-embed-l-v2.0-ko",
+                "owned_by": "dragonkue",
+                "created": int(time.time()),
+                "description": "Snowflake Arctic Embed L v2.0 Korean - High-performance multilingual embedding model optimized for Korean"
+            },
             "nlpai-lab/KURE-v1": {
                 "id": "nlpai-lab/KURE-v1",
                 "owned_by": "nlpai-lab",

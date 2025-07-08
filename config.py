@@ -19,8 +19,9 @@ class Settings(BaseSettings):
     workers: int = 1
 
     # Model Configuration
-    default_model: str = "nlpai-lab/KURE-v1"
+    default_model: str = "dragonkue/snowflake-arctic-embed-l-v2.0-ko"
     available_models: List[str] = [
+        "dragonkue/snowflake-arctic-embed-l-v2.0-ko",
         "nlpai-lab/KURE-v1",
         "nlpai-lab/KoE5"
     ]

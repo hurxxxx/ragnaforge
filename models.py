@@ -17,7 +17,7 @@ class EmbeddingRequest(BaseModel):
     model: Optional[str] = Field(
         None,
         description="Model to use for embedding",
-        example="nlpai-lab/KURE-v1"
+        example="dragonkue/snowflake-arctic-embed-l-v2.0-ko"
     )
     encoding_format: Optional[str] = Field(
         "float",
@@ -315,7 +315,7 @@ class DocumentProcessRequest(BaseModel):
     embedding_model: Optional[str] = Field(
         None,
         description="Model to use for embeddings",
-        example="nlpai-lab/KURE-v1"
+        example="dragonkue/snowflake-arctic-embed-l-v2.0-ko"
     )
 
 
