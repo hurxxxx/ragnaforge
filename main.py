@@ -680,11 +680,14 @@ async def unified_vector_search(
         # Convert to SearchResponse format
         search_results = []
         for item in result.get("results", []):
+            metadata = item.get("metadata", {})
+            # Qdrant stores text in metadata.text, not metadata.content
+            content = metadata.get("text", metadata.get("content", ""))
             search_results.append(SearchResult(
                 id=str(item.get("id", "")),
                 score=item.get("score", 0.0),
-                metadata=item.get("metadata", {}),
-                content=item.get("metadata", {}).get("content", ""),
+                metadata=metadata,
+                content=content,
                 search_source="vector"
             ))
 
@@ -800,11 +803,14 @@ async def unified_hybrid_search(
         # Convert to HybridSearchResponse format
         search_results = []
         for item in result.get("results", []):
+            metadata = item.get("metadata", {})
+            # Qdrant stores text in metadata.text, not metadata.content
+            content = metadata.get("text", metadata.get("content", item.get("content", "")))
             search_results.append(SearchResult(
                 id=str(item.get("id", "")),
                 score=item.get("hybrid_score", item.get("score", 0.0)),
-                metadata=item.get("metadata", {}),
-                content=item.get("metadata", {}).get("content", item.get("content", "")),
+                metadata=metadata,
+                content=content,
                 highlights=item.get("highlights"),
                 search_source=item.get("search_source", "hybrid")
             ))

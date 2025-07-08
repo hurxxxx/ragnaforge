@@ -278,11 +278,13 @@ class DocumentProcessingService:
                     # Prepare documents for unified search service
                     documents = []
                     for i, chunk in enumerate(chunks):
+                        # 청킹 서비스에서 text 필드에 텍스트를 저장하므로 이를 content로 매핑
+                        chunk_text = chunk.get("text", "")
                         doc = {
                             "id": f"{document_id}_chunk_{i}",
                             "document_id": document_id,
                             "embedding": chunk.get("embedding"),
-                            "content": chunk.get("content", ""),
+                            "content": chunk_text,  # text 필드를 content로 매핑
                             "title": file_info["filename"],
                             "file_name": file_info["filename"],
                             "file_type": file_type,
@@ -297,7 +299,8 @@ class DocumentProcessingService:
                                 "embedding_model": embedding_model,
                                 "document_id": document_id,
                                 "chunk_index": i,
-                                "content": chunk.get("content", "")
+                                "text": chunk_text,  # Qdrant용 text 필드
+                                "content": chunk_text  # MeiliSearch용 content 필드
                             }
                         }
                         documents.append(doc)
