@@ -397,7 +397,7 @@ class MeiliSearchTextBackend(TextSearchInterface):
                 "index_name": self.index_name,
                 "documents_count": getattr(stats, "number_of_documents", 0),
                 "is_indexing": getattr(stats, "is_indexing", False),
-                "field_distribution": getattr(stats, "field_distribution", {}),
+                "field_distribution": dict(getattr(stats, "field_distribution", {})),
                 "searchable_attributes": getattr(settings, "searchable_attributes", []),
                 "filterable_attributes": getattr(settings, "filterable_attributes", []),
                 "sortable_attributes": getattr(settings, "sortable_attributes", [])

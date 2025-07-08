@@ -270,30 +270,49 @@ class DocumentProcessingService:
             from services.database_service import database_service
             database_service.store_document(processed_doc)
 
-            # Store in Qdrant if embeddings were generated
+            # Store in unified search service if embeddings were generated
             if embeddings_generated and chunks:
                 try:
-                    from services.qdrant_service import qdrant_service
-                    qdrant_metadata = {
-                        "filename": file_info["filename"],
-                        "file_type": file_type,
-                        "conversion_method": method,
-                        "created_at": time.time(),
-                        "embedding_model": embedding_model
-                    }
+                    from services.unified_search_service import unified_search_service
 
-                    qdrant_success = qdrant_service.store_document_chunks(
-                        document_id, chunks, qdrant_metadata
-                    )
+                    # Prepare documents for unified search service
+                    documents = []
+                    for i, chunk in enumerate(chunks):
+                        doc = {
+                            "id": f"{document_id}_chunk_{i}",
+                            "document_id": document_id,
+                            "embedding": chunk.get("embedding"),
+                            "content": chunk.get("content", ""),
+                            "title": file_info["filename"],
+                            "file_name": file_info["filename"],
+                            "file_type": file_type,
+                            "chunk_index": i,
+                            "file_size": file_info.get("size", 0),
+                            "created_at": time.time(),
+                            "metadata": {
+                                "filename": file_info["filename"],
+                                "file_type": file_type,
+                                "conversion_method": method,
+                                "created_at": time.time(),
+                                "embedding_model": embedding_model,
+                                "document_id": document_id,
+                                "chunk_index": i,
+                                "content": chunk.get("content", "")
+                            }
+                        }
+                        documents.append(doc)
 
-                    if qdrant_success:
-                        logger.info(f"Document chunks stored in Qdrant: {document_id}")
+                    # Store in unified search service (both vector and text backends)
+                    unified_success = await unified_search_service.store_documents(documents)
+
+                    if unified_success:
+                        logger.info(f"Document chunks stored in unified search service: {document_id}")
                     else:
-                        logger.warning(f"Failed to store chunks in Qdrant: {document_id}")
+                        logger.warning(f"Failed to store chunks in unified search service: {document_id}")
 
                 except Exception as e:
-                    logger.error(f"Error storing in Qdrant: {str(e)}")
-                    # Don't fail the whole process if Qdrant fails
+                    logger.error(f"Error storing chunks in unified search service: {str(e)}")
+                    # Don't fail the whole process if unified search fails
             
             logger.info(f"Document processed successfully: {file_info['filename']} -> {document_id}")
             

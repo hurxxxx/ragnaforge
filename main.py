@@ -19,7 +19,9 @@ from models import (
     DocumentConversionRequest, DocumentConversionResponse, ConversionComparisonResponse,
     FileUploadResponse, DocumentProcessRequest, DocumentProcessResponse,
     VectorSearchRequest, VectorSearchResponse, QdrantStatsResponse,
-    StorageStatsResponse, StorageFilesResponse, StorageCleanupResponse, FileInfoResponse
+    StorageStatsResponse, StorageFilesResponse, StorageCleanupResponse, FileInfoResponse,
+    SearchRequest, HybridSearchRequest, SearchResult, SearchResponse,
+    HybridSearchResponse, SearchStatsResponse
 )
 from services import embedding_service, chunking_service
 from services.marker_service import marker_service
@@ -29,6 +31,7 @@ from services.document_processing_service import document_processing_service
 from services.database_service import database_service
 from services.qdrant_service import qdrant_service
 from services.search_service import search_service
+from services.unified_search_service import unified_search_service
 from services.storage_service import storage_service
 
 # Configure logging
@@ -56,6 +59,14 @@ async def lifespan(app: FastAPI):
             logger.info(f"✅ Qdrant connected: {qdrant_health.get('total_collections', 0)} collections")
         else:
             logger.warning(f"⚠️ Qdrant connection issue: {qdrant_health.get('error', 'Unknown')}")
+
+        # Initialize unified search service
+        logger.info("🔧 Initializing unified search service...")
+        unified_init = await unified_search_service.initialize()
+        if unified_init:
+            logger.info("✅ Unified search service initialized successfully")
+        else:
+            logger.warning("⚠️ Unified search service initialization failed")
 
         startup_time = time.time() - start_time
         logger.info(f"Default model {settings.default_model} loaded successfully in {startup_time:.2f}s")
@@ -636,6 +647,246 @@ async def get_search_stats(authorization: str = Depends(verify_api_key)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get search stats: {str(e)}"
         )
+
+
+# Unified Search API Endpoints
+@app.post("/v1/search/vector", response_model=SearchResponse)
+async def unified_vector_search(
+    request: SearchRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Perform vector similarity search using the unified search service."""
+    try:
+        if not unified_search_service.is_initialized:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unified search service not initialized"
+            )
+
+        result = await unified_search_service.vector_search(
+            query=request.query,
+            limit=request.limit,
+            score_threshold=request.score_threshold,
+            filters=request.filters,
+            embedding_model=request.embedding_model
+        )
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Vector search failed")
+            )
+
+        # Convert to SearchResponse format
+        search_results = []
+        for item in result.get("results", []):
+            search_results.append(SearchResult(
+                id=str(item.get("id", "")),
+                score=item.get("score", 0.0),
+                metadata=item.get("metadata", {}),
+                content=item.get("metadata", {}).get("content", ""),
+                search_source="vector"
+            ))
+
+        return SearchResponse(
+            success=True,
+            results=search_results,
+            total_results=result.get("total_results", 0),
+            search_type="vector",
+            query=request.query,
+            search_time=result.get("search_time", 0.0),
+            backend=result.get("backend", "")
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in unified vector search: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Vector search failed: {str(e)}"
+        )
+
+
+@app.post("/v1/search/text", response_model=SearchResponse)
+async def unified_text_search(
+    request: SearchRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Perform text search using the unified search service."""
+    try:
+        if not unified_search_service.is_initialized:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unified search service not initialized"
+            )
+
+        result = await unified_search_service.text_search(
+            query=request.query,
+            limit=request.limit,
+            offset=request.offset,
+            filters=request.filters,
+            highlight=request.highlight
+        )
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Text search failed")
+            )
+
+        # Convert to SearchResponse format
+        search_results = []
+        for item in result.get("results", []):
+            search_results.append(SearchResult(
+                id=str(item.get("id", "")),
+                score=1.0,  # Text search might not have explicit scores
+                metadata=item,
+                content=item.get("content", ""),
+                highlights=item.get("_formatted", {}) if request.highlight else None,
+                search_source="text"
+            ))
+
+        return SearchResponse(
+            success=True,
+            results=search_results,
+            total_results=result.get("total", 0),
+            search_type="text",
+            query=request.query,
+            search_time=result.get("search_time", 0.0),
+            backend=result.get("backend", "")
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in unified text search: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Text search failed: {str(e)}"
+        )
+
+
+@app.post("/v1/search/hybrid", response_model=HybridSearchResponse)
+async def unified_hybrid_search(
+    request: HybridSearchRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Perform hybrid search combining vector and text search."""
+    try:
+        if not unified_search_service.is_initialized:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unified search service not initialized"
+            )
+
+        result = await unified_search_service.hybrid_search(
+            query=request.query,
+            limit=request.limit,
+            vector_weight=request.vector_weight,
+            text_weight=request.text_weight,
+            score_threshold=request.score_threshold,
+            filters=request.filters,
+            embedding_model=request.embedding_model,
+            highlight=request.highlight
+        )
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Hybrid search failed")
+            )
+
+        # Convert to HybridSearchResponse format
+        search_results = []
+        for item in result.get("results", []):
+            search_results.append(SearchResult(
+                id=str(item.get("id", "")),
+                score=item.get("hybrid_score", item.get("score", 0.0)),
+                metadata=item.get("metadata", {}),
+                content=item.get("metadata", {}).get("content", item.get("content", "")),
+                highlights=item.get("highlights"),
+                search_source=item.get("search_source", "hybrid")
+            ))
+
+        return HybridSearchResponse(
+            success=True,
+            results=search_results,
+            total_results=result.get("total_results", 0),
+            search_type="hybrid",
+            query=request.query,
+            search_time=result.get("search_time", 0.0),
+            vector_results_count=result.get("vector_results_count", 0),
+            text_results_count=result.get("text_results_count", 0),
+            weights=result.get("weights", {}),
+            backends=result.get("backends", {})
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in unified hybrid search: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Hybrid search failed: {str(e)}"
+        )
+
+
+@app.get("/v1/search/unified/stats", response_model=SearchStatsResponse)
+async def get_unified_search_stats(authorization: str = Depends(verify_api_key)):
+    """Get unified search service statistics and backend information."""
+    try:
+        if not unified_search_service.is_initialized:
+            return SearchStatsResponse(
+                success=False,
+                unified_search={"initialized": False, "error": "Service not initialized"},
+                vector_backend={},
+                text_backend={},
+                available_backends={"vector": [], "text": []}
+            )
+
+        stats = unified_search_service.get_stats()
+        health = await unified_search_service.health_check()
+
+        # Get available backends
+        from services.search_factory import SearchBackendFactory
+        available_backends = {
+            "vector": SearchBackendFactory.get_available_vector_backends(),
+            "text": SearchBackendFactory.get_available_text_backends()
+        }
+
+        return SearchStatsResponse(
+            success=True,
+            unified_search=stats.get("unified_search", {}),
+            vector_backend=stats.get("vector_backend", {}),
+            text_backend=stats.get("text_backend", {}),
+            available_backends=available_backends
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting unified search stats: {str(e)}")
+        return SearchStatsResponse(
+            success=False,
+            unified_search={"error": str(e)},
+            vector_backend={},
+            text_backend={},
+            available_backends={"vector": [], "text": []}
+        )
+
+
+@app.get("/v1/search/unified/health")
+async def get_unified_search_health(authorization: str = Depends(verify_api_key)):
+    """Check unified search service health."""
+    try:
+        health = await unified_search_service.health_check()
+        return health
+    except Exception as e:
+        logger.error(f"Error checking unified search health: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "initialized": unified_search_service.is_initialized
+        }
 
 
 # Storage Management Endpoints

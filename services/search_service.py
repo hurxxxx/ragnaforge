@@ -1,4 +1,4 @@
-"""Search service for RAG functionality using Qdrant vector database."""
+"""Search service for RAG functionality using unified search architecture."""
 
 import logging
 import time
@@ -12,21 +12,57 @@ logger = logging.getLogger(__name__)
 
 class SearchService:
     """Service for semantic search and RAG functionality."""
-    
+
     def __init__(self):
+        self._unified_service = None
         logger.info("Search service initialized")
+
+    @property
+    def unified_service(self):
+        """Lazy load unified search service."""
+        if self._unified_service is None:
+            from services.unified_search_service import unified_search_service
+            self._unified_service = unified_search_service
+        return self._unified_service
     
-    async def vector_search(self, query: str, limit: int = 10, 
+    async def vector_search(self, query: str, limit: int = 10,
                           score_threshold: float = 0.0,
                           document_filter: Optional[Dict] = None,
                           embedding_model: Optional[str] = None) -> Dict:
-        """Perform vector similarity search."""
+        """Perform vector similarity search using unified search service."""
+        try:
+            # Use unified search service if available and initialized
+            if self.unified_service.is_initialized:
+                logger.info(f"Using unified search service for vector search: '{query[:50]}...'")
+                result = await self.unified_service.vector_search(
+                    query=query,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    filters=document_filter,
+                    embedding_model=embedding_model
+                )
+                return result
+            else:
+                # Fallback to direct Qdrant search
+                logger.warning("Unified search service not initialized, falling back to direct Qdrant search")
+                return await self._fallback_vector_search(query, limit, score_threshold, document_filter, embedding_model)
+
+        except Exception as e:
+            logger.error(f"Error in vector search: {str(e)}")
+            # Fallback to direct Qdrant search
+            return await self._fallback_vector_search(query, limit, score_threshold, document_filter, embedding_model)
+
+    async def _fallback_vector_search(self, query: str, limit: int = 10,
+                                    score_threshold: float = 0.0,
+                                    document_filter: Optional[Dict] = None,
+                                    embedding_model: Optional[str] = None) -> Dict:
+        """Fallback vector search using direct Qdrant access."""
         start_time = time.time()
-        
+
         try:
             # Use default model if not specified
             model = embedding_model or settings.default_model
-            
+
             # Generate query embedding
             logger.info(f"Generating embedding for query: '{query[:50]}...'")
             query_embeddings = embedding_service.encode_texts([query], model)
@@ -40,7 +76,7 @@ class SearchService:
 
             # Convert numpy array to list
             query_vector = query_embeddings[0].tolist() if hasattr(query_embeddings[0], 'tolist') else list(query_embeddings[0])
-            
+
             # Search in Qdrant
             logger.info(f"Searching Qdrant with limit={limit}, threshold={score_threshold}")
             search_results = qdrant_service.search_similar_chunks(
@@ -146,17 +182,36 @@ class SearchService:
                           document_filter: Optional[Dict] = None) -> Dict:
         """
         Perform hybrid search combining vector similarity and text matching.
-        Note: This is a placeholder for future implementation with full-text search.
         """
-        # For now, just perform vector search
-        # TODO: Implement full-text search integration (Elasticsearch/PostgreSQL FTS)
-        logger.info("Hybrid search requested - currently using vector search only")
-        
-        return await self.vector_search(
-            query=query,
-            limit=limit,
-            document_filter=document_filter
-        )
+        try:
+            # Use unified search service if available and initialized
+            if self.unified_service.is_initialized:
+                logger.info(f"Using unified search service for hybrid search: '{query[:50]}...'")
+                result = await self.unified_service.hybrid_search(
+                    query=query,
+                    limit=limit,
+                    vector_weight=vector_weight,
+                    text_weight=text_weight,
+                    filters=document_filter
+                )
+                return result
+            else:
+                # Fallback to vector search only
+                logger.warning("Unified search service not initialized, falling back to vector search only")
+                return await self.vector_search(
+                    query=query,
+                    limit=limit,
+                    document_filter=document_filter
+                )
+
+        except Exception as e:
+            logger.error(f"Error in hybrid search: {str(e)}")
+            # Fallback to vector search
+            return await self.vector_search(
+                query=query,
+                limit=limit,
+                document_filter=document_filter
+            )
     
     def get_search_stats(self) -> Dict:
         """Get search-related statistics."""
@@ -174,8 +229,8 @@ class SearchService:
                 },
                 "search_capabilities": {
                     "vector_search": True,
-                    "hybrid_search": False,  # TODO: Enable when full-text search is implemented
-                    "full_text_search": False
+                    "hybrid_search": self.unified_service.is_initialized,
+                    "full_text_search": self.unified_service.is_initialized
                 },
                 "embedding_models": {
                     "default_model": settings.default_model,

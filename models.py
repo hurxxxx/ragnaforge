@@ -436,3 +436,104 @@ class FileInfoResponse(BaseModel):
 
     success: bool = Field(..., description="Whether the request was successful")
     file_info: Dict[str, Any] = Field(..., description="File information")
+
+
+# Unified Search API Models
+class SearchRequest(BaseModel):
+    """Request model for unified search."""
+
+    query: str = Field(..., description="Search query", example="인공지능 기술 문서")
+    search_type: str = Field(
+        "hybrid",
+        description="Type of search to perform",
+        example="hybrid"
+    )
+    limit: int = Field(10, description="Maximum number of results", ge=1, le=100)
+    offset: int = Field(0, description="Number of results to skip", ge=0)
+    score_threshold: float = Field(0.0, description="Minimum similarity score", ge=0.0, le=1.0)
+    filters: Optional[Dict[str, Any]] = Field(None, description="Search filters")
+    embedding_model: Optional[str] = Field(None, description="Embedding model to use")
+    highlight: bool = Field(False, description="Whether to highlight search terms")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "query": "인공지능 기술 문서",
+                "search_type": "hybrid",
+                "limit": 10,
+                "filters": {
+                    "file_type": ["pdf", "docx"],
+                    "date_range": "2024-01-01 to 2024-12-31"
+                },
+                "hybrid_config": {
+                    "vector_weight": 0.6,
+                    "text_weight": 0.4
+                }
+            }
+        }
+    }
+
+
+class HybridSearchRequest(SearchRequest):
+    """Request model for hybrid search with additional configuration."""
+
+    vector_weight: float = Field(0.6, description="Weight for vector search results", ge=0.0, le=1.0)
+    text_weight: float = Field(0.4, description="Weight for text search results", ge=0.0, le=1.0)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "query": "인공지능 기술 문서",
+                "search_type": "hybrid",
+                "limit": 10,
+                "vector_weight": 0.6,
+                "text_weight": 0.4,
+                "filters": {
+                    "file_type": ["pdf", "docx"]
+                }
+            }
+        }
+    }
+
+
+class SearchResult(BaseModel):
+    """Individual search result."""
+
+    id: str = Field(..., description="Document or chunk ID")
+    score: float = Field(..., description="Relevance score")
+    metadata: Dict[str, Any] = Field(..., description="Document metadata")
+    content: Optional[str] = Field(None, description="Document content or snippet")
+    highlights: Optional[Dict[str, List[str]]] = Field(None, description="Highlighted text snippets")
+    search_source: Optional[str] = Field(None, description="Source of the result (vector/text/both)")
+
+
+class SearchResponse(BaseModel):
+    """Response model for search operations."""
+
+    success: bool = Field(..., description="Whether the search was successful")
+    results: List[SearchResult] = Field(..., description="Search results")
+    total_results: int = Field(..., description="Total number of results found")
+    search_type: str = Field(..., description="Type of search performed")
+    query: str = Field(..., description="Original search query")
+    search_time: float = Field(..., description="Time taken for search in seconds")
+    backend: Optional[str] = Field(None, description="Backend used for search")
+    error: Optional[str] = Field(None, description="Error message if search failed")
+
+
+class HybridSearchResponse(SearchResponse):
+    """Response model for hybrid search with additional metrics."""
+
+    vector_results_count: int = Field(..., description="Number of vector search results")
+    text_results_count: int = Field(..., description="Number of text search results")
+    weights: Dict[str, float] = Field(..., description="Weights used for result fusion")
+    backends: Dict[str, str] = Field(..., description="Backends used for search")
+
+
+class SearchStatsResponse(BaseModel):
+    """Response model for search statistics."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    unified_search: Dict[str, Any] = Field(..., description="Unified search service stats")
+    vector_backend: Dict[str, Any] = Field(..., description="Vector backend statistics")
+    text_backend: Dict[str, Any] = Field(..., description="Text backend statistics")
+    available_backends: Dict[str, List[str]] = Field(..., description="Available backends")
