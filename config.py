@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     workers: int = 1
 
     # Model Configuration
-    default_model: str = "dragonkue/snowflake-arctic-embed-l-v2.0-ko"
+    default_model: str = "nlpai-lab/KURE-v1"
     available_models: List[str] = [
         "dragonkue/snowflake-arctic-embed-l-v2.0-ko",
         "nlpai-lab/KURE-v1",
@@ -59,6 +59,29 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_collection_name: str = "ragnaforge_documents"
+
+    # Search Backend Configuration
+    vector_backend: str = "qdrant"  # qdrant, milvus, chroma, weaviate
+    text_backend: str = "meilisearch"  # meilisearch, opensearch, elasticsearch, solr
+
+    # MeiliSearch Configuration
+    meilisearch_url: str = "http://localhost:7700/"
+    meilisearch_api_key: Optional[str] = None
+    meilisearch_index_name: str = "ragnaforge_documents"
+
+    # OpenSearch Configuration (for future use)
+    opensearch_host: str = "localhost"
+    opensearch_port: int = 9200
+    opensearch_username: Optional[str] = None
+    opensearch_password: Optional[str] = None
+    opensearch_index_name: str = "ragnaforge_documents"
+
+    # Milvus Configuration (for future use)
+    milvus_host: str = "localhost"
+    milvus_port: int = 19530
+    milvus_username: Optional[str] = None
+    milvus_password: Optional[str] = None
+    milvus_collection_name: str = "ragnaforge_documents"
 
     # Storage Configuration
     storage_base_path: str = "./data/storage"
