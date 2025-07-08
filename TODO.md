@@ -79,13 +79,16 @@
 
 ### 🔶 MEDIUM PRIORITY - 시스템 확장
 
-#### 1. 🔍 Full-text Search 통합
+#### 1. 🔍 MeiliSearch 통합 (Full-text Search) ⭐ **SELECTED**
 **현재 상태**: Vector 검색만 구현됨
+**선택된 솔루션**: MeiliSearch (MIT License)
 **필요 작업**:
-- [ ] Elasticsearch 또는 PostgreSQL FTS 통합
-- [ ] 하이브리드 검색 알고리즘 (Vector + Text)
-- [ ] 검색 결과 융합 및 재순위화
-- [ ] 검색 타입별 가중치 설정
+- [ ] MeiliSearch 서버 설정 및 통합
+- [ ] 문서 인덱싱 파이프라인 구현
+- [ ] 하이브리드 검색 알고리즘 (Vector + MeiliSearch)
+- [ ] 검색 결과 융합 및 스코어링
+- [ ] 한국어 최적화 설정
+- [ ] Typo tolerance 및 동의어 처리
 
 #### 2. 🎯 Rerank 시스템
 **현재 상태**: 미구현
@@ -193,13 +196,16 @@
 
 **성과**: 100% 목표 달성, 통합 테스트 100% 통과
 
-### 🔄 Sprint 2: 하이브리드 검색 & Rerank (다음 목표)
+### 🔄 Sprint 2: MeiliSearch 통합 & 하이브리드 검색 (다음 목표)
 **예상 기간**: 1-2주
+**선택된 기술**: MeiliSearch (MIT License)
 **우선순위 작업**:
-1. [ ] Full-text Search 통합 (Elasticsearch/PostgreSQL FTS)
-2. [ ] 하이브리드 검색 알고리즘 (Vector + Text)
-3. [ ] Rerank 시스템 구현
-4. [ ] 검색 결과 최적화
+1. [ ] MeiliSearch 서버 설정 및 Docker 통합
+2. [ ] 문서 인덱싱 파이프라인 (Qdrant + MeiliSearch)
+3. [ ] 하이브리드 검색 API 구현 (Vector + Full-text)
+4. [ ] 검색 결과 융합 알고리즘
+5. [ ] 한국어 검색 최적화
+6. [ ] Rerank 시스템 구현
 
 ### 🔮 Sprint 3: 고급 기능 & 최적화 (향후 계획)
 **예상 기간**: 1-2주
@@ -244,8 +250,98 @@
 ## 🚀 다음 단계
 
 **즉시 시작 가능한 작업**:
-1. Full-text Search 엔진 선택 및 통합
-2. 하이브리드 검색 알고리즘 설계
-3. Rerank 모델 선정 및 구현
+1. ✅ Full-text Search 엔진 선택 완료 (MeiliSearch)
+2. MeiliSearch 서버 설정 및 통합
+3. 하이브리드 검색 알고리즘 설계 및 구현
+4. Rerank 모델 선정 및 구현
+
+## 🔧 MeiliSearch 통합 상세 계획
+
+### **Phase 1: MeiliSearch 기본 통합 (1주)**
+
+#### 🐳 인프라 설정
+```yaml
+# docker-compose.yml 추가
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.5
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
+      - MEILI_ENV=production
+    volumes:
+      - meilisearch_data:/meili_data
+```
+
+#### 🔧 구현 작업
+- [ ] MeiliSearch 서비스 클래스 생성 (`services/meilisearch_service.py`)
+- [ ] 환경 변수 설정 추가 (`MEILI_HOST`, `MEILI_MASTER_KEY`)
+- [ ] 문서 인덱싱 API 구현
+- [ ] 기본 검색 API 구현
+- [ ] 헬스체크 통합
+
+### **Phase 2: 하이브리드 검색 구현 (1주)**
+
+#### 🔍 검색 알고리즘
+```python
+# 하이브리드 검색 예시
+async def hybrid_search(query: str, top_k: int = 10):
+    # 1. Vector 검색 (기존 Qdrant)
+    vector_results = await qdrant_search(query, top_k * 2)
+
+    # 2. Full-text 검색 (MeiliSearch)
+    text_results = await meilisearch_search(query, top_k * 2)
+
+    # 3. 결과 융합 및 재순위화
+    return merge_and_rerank(vector_results, text_results, top_k)
+```
+
+#### 🔧 구현 작업
+- [ ] 하이브리드 검색 알고리즘 구현
+- [ ] 스코어 정규화 및 가중치 설정
+- [ ] 중복 제거 로직
+- [ ] 검색 타입 선택 API (`vector`, `text`, `hybrid`)
+
+### **Phase 3: 최적화 및 고도화 (1주)**
+
+#### 🇰🇷 한국어 최적화
+- [ ] 한국어 토크나이저 설정
+- [ ] Typo tolerance 튜닝
+- [ ] 동의어 사전 구축
+- [ ] 초성 검색 지원
+
+#### 📊 성능 최적화
+- [ ] 인덱싱 성능 최적화
+- [ ] 검색 결과 캐싱
+- [ ] 배치 인덱싱 구현
+- [ ] 모니터링 및 메트릭 추가
+
+### **예상 API 구조**
+
+```python
+# 새로운 검색 API
+POST /v1/search
+{
+  "query": "AI 기술 문서",
+  "search_type": "hybrid",  # vector, text, hybrid
+  "top_k": 10,
+  "filters": {
+    "file_type": ["pdf", "docx"],
+    "date_range": "2024-01-01 to 2024-12-31"
+  },
+  "hybrid_config": {
+    "vector_weight": 0.6,
+    "text_weight": 0.4,
+    "rerank": true
+  }
+}
+```
+
+### **성능 목표**
+- 검색 응답 시간: < 100ms (현재 150ms에서 개선)
+- 하이브리드 검색 정확도: > 90%
+- 한국어 Typo tolerance: > 95%
+- 동시 검색 처리: 50+ requests/sec
 
 **Ragnaforge는 이제 완전한 RAG 시스템으로 진화했습니다!** 🎉
