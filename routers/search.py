@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 
 from models import (
     VectorSearchRequest, VectorSearchResponse,
-    SearchRequest, SearchResponse,
+    SearchRequest, SearchResponse, SearchResult,
     HybridSearchRequest, HybridSearchResponse,
     SearchStatsResponse
 )
@@ -70,7 +70,33 @@ async def unified_vector_search(
                 detail=result.get("error", "Vector search failed")
             )
 
-        return SearchResponse(**result)
+        # Convert raw results to SearchResult format
+        search_results = []
+        for item in result.get("results", []):
+            metadata = item.get("metadata", {})
+            # Extract content from metadata.text (Qdrant stores text content here)
+            content = metadata.get("text", "")
+
+            search_result = SearchResult(
+                id=str(item.get("id", "")),
+                score=item.get("score", 0.0),
+                metadata=metadata,
+                content=content,
+                highlights=item.get("highlights"),
+                search_source="vector"
+            )
+            search_results.append(search_result)
+
+        return SearchResponse(
+            success=result.get("success", True),
+            results=search_results,
+            total_results=result.get("total_results", len(search_results)),
+            search_type=result.get("search_type", "vector"),
+            query=result.get("query", request.query),
+            search_time=result.get("search_time", 0.0),
+            backend=result.get("backend", ""),
+            error=result.get("error")
+        )
 
     except HTTPException:
         raise
@@ -152,7 +178,38 @@ async def unified_hybrid_search(
                 detail=result.get("error", "Hybrid search failed")
             )
 
-        return HybridSearchResponse(**result)
+        # Convert raw results to SearchResult format
+        search_results = []
+        for item in result.get("results", []):
+            metadata = item.get("metadata", {})
+            # Extract content from metadata.text (Qdrant stores text content here)
+            # For text search results, content might be in item.content
+            content = metadata.get("text", item.get("content", ""))
+
+            search_result = SearchResult(
+                id=str(item.get("id", "")),
+                score=item.get("hybrid_score", item.get("score", 0.0)),
+                metadata=metadata,
+                content=content,
+                highlights=item.get("highlights"),
+                search_source=item.get("search_source", "hybrid")
+            )
+            search_results.append(search_result)
+
+        return HybridSearchResponse(
+            success=result.get("success", True),
+            results=search_results,
+            total_results=result.get("total_results", len(search_results)),
+            search_type=result.get("search_type", "hybrid"),
+            query=result.get("query", request.query),
+            search_time=result.get("search_time", 0.0),
+            backend=result.get("backend"),
+            error=result.get("error"),
+            vector_results_count=result.get("vector_results_count", 0),
+            text_results_count=result.get("text_results_count", 0),
+            weights=result.get("weights", {}),
+            backends=result.get("backends", {})
+        )
 
     except HTTPException:
         raise
