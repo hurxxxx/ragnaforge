@@ -698,14 +698,13 @@ async def repair_data_inconsistencies(
 
 @app.get("/v1/monitoring/stats", response_model=MonitoringStatsResponse)
 async def get_monitoring_stats(
-    hours: int = 24,
     authorization: str = Depends(verify_api_key)
 ):
-    """Get comprehensive monitoring statistics."""
+    """Get basic monitoring statistics."""
     try:
         from services.monitoring_service import monitoring_service
 
-        stats = monitoring_service.export_statistics(hours=hours)
+        stats = monitoring_service.get_basic_stats()
         return MonitoringStatsResponse(
             success=True,
             **stats

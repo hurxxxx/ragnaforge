@@ -534,11 +534,11 @@ class DataRepairResponse(BaseModel):
 
 
 class MonitoringStatsResponse(BaseModel):
-    """Response for monitoring statistics."""
+    """Response for simplified monitoring statistics."""
 
     success: bool = Field(..., description="Whether the request was successful")
-    duplicate_detection: Dict[str, Any] = Field(..., description="Duplicate detection statistics")
-    performance: Dict[str, Any] = Field(..., description="Performance statistics")
+    duplicate_detection: Dict[str, Any] = Field(..., description="Basic duplicate detection statistics")
+    performance: Dict[str, Any] = Field(..., description="Basic performance statistics")
     system_info: Dict[str, Any] = Field(..., description="System information")
 
 

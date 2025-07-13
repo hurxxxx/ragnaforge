@@ -193,7 +193,6 @@ class FileUploadService:
                 monitoring_service.log_performance_metric(
                     operation="hash_calculation",
                     duration_ms=hash_duration,
-                    file_size_bytes=file_size,
                     success=True
                 )
 
@@ -205,7 +204,6 @@ class FileUploadService:
                 monitoring_service.log_performance_metric(
                     operation="hash_calculation",
                     duration_ms=hash_duration,
-                    file_size_bytes=file_size,
                     success=False,
                     error_message=str(e)
                 )
@@ -253,7 +251,6 @@ class FileUploadService:
             monitoring_service.log_performance_metric(
                 operation="duplicate_check",
                 duration_ms=duplicate_check_duration,
-                file_size_bytes=file_size,
                 success=True
             )
 
@@ -266,12 +263,11 @@ class FileUploadService:
                     file_hash=file_hash,
                     filename=file.filename,
                     file_size=file_size,
-                    file_type=file_type.value,
-                    upload_count=new_upload_count,
-                    detection_method=detection_method
+                    upload_count=new_upload_count
                 )
 
                 # Increment upload count for existing file
+                from services.database_service import database_service
                 database_service.increment_upload_count(existing_file['file_id'])
 
                 # Clean up temporary file
@@ -283,12 +279,20 @@ class FileUploadService:
                 monitoring_service.log_performance_metric(
                     operation="upload_duplicate",
                     duration_ms=upload_duration,
-                    file_size_bytes=file_size,
                     success=True
                 )
 
                 return {
                     "success": True,
+                    "file_id": existing_file["file_id"],
+                    "filename": file.filename,
+                    "file_type": file_type.value,
+                    "file_size": file_size,
+                    "upload_time": time.time() - start_time,
+                    "temp_path": str(temp_file_path),
+                    "storage_path": existing_file.get("storage_path", ""),
+                    "relative_path": existing_file.get("relative_path", ""),
+                    "error": None,
                     "duplicate_detected": True,
                     "existing_file": {
                         "file_id": existing_file["file_id"],
@@ -298,8 +302,9 @@ class FileUploadService:
                         "upload_count": new_upload_count,
                         "original_upload_time": existing_file["created_at"]
                     },
-                    "message": f"동일한 파일이 이미 존재합니다: {existing_file['filename']}",
-                    "upload_time": time.time() - start_time
+                    "file_hash": file_hash,
+                    "upload_count": new_upload_count,
+                    "message": f"동일한 파일이 이미 존재합니다: {existing_file['filename']}"
                 }
             
             # Move file to organized storage using storage service
@@ -369,7 +374,6 @@ class FileUploadService:
             monitoring_service.log_performance_metric(
                 operation="upload_new",
                 duration_ms=upload_duration,
-                file_size_bytes=file_size,
                 success=True
             )
 
@@ -396,7 +400,6 @@ class FileUploadService:
             monitoring_service.log_performance_metric(
                 operation="upload_failed",
                 duration_ms=upload_duration,
-                file_size_bytes=getattr(file, 'size', 0),
                 success=False,
                 error_message=str(e)
             )
