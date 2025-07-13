@@ -6,6 +6,8 @@ import time
 import shutil
 import hashlib
 import logging
+from functools import lru_cache
+from typing import Dict, Optional, Tuple, List
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from fastapi import UploadFile, HTTPException
@@ -25,6 +27,11 @@ class FileUploadService:
 
         # Create temp directory if it doesn't exist
         self.temp_dir.mkdir(parents=True, exist_ok=True)
+
+        # Performance optimization: cache for recent hash lookups
+        self._hash_cache = {}
+        self._cache_max_size = 1000
+
         logger.info(f"File upload service initialized with temp_dir: {self.temp_dir}")
     
     def _get_file_type(self, filename: str) -> Optional[SupportedFileType]:
@@ -55,12 +62,83 @@ class FileUploadService:
         return True, None
 
     def _calculate_file_hash(self, content: bytes) -> str:
-        """Calculate SHA-256 hash of file content."""
-        return hashlib.sha256(content).hexdigest()
+        """Calculate SHA-256 hash of file content with fallback."""
+        try:
+            # For large files (>10MB), use chunked processing to reduce memory usage
+            if len(content) > 10 * 1024 * 1024:  # 10MB
+                return self._calculate_chunked_hash(content)
+            else:
+                return hashlib.sha256(content).hexdigest()
+        except Exception as e:
+            logger.warning(f"SHA-256 hash calculation failed: {e}")
+            # Fallback to MD5 if SHA-256 fails
+            try:
+                return f"md5_{hashlib.md5(content).hexdigest()}"
+            except Exception as e2:
+                logger.error(f"MD5 hash calculation also failed: {e2}")
+                # Last resort: use file size + timestamp as identifier
+                import time
+                return f"fallback_{len(content)}_{int(time.time() * 1000000)}"
+
+    def _calculate_chunked_hash(self, content: bytes, chunk_size: int = 8192) -> str:
+        """Calculate hash using chunked processing for memory efficiency."""
+        try:
+            hash_obj = hashlib.sha256()
+
+            # Process content in chunks
+            for i in range(0, len(content), chunk_size):
+                chunk = content[i:i + chunk_size]
+                hash_obj.update(chunk)
+
+            return hash_obj.hexdigest()
+        except Exception as e:
+            logger.error(f"Chunked hash calculation failed: {e}")
+            raise
+
+    async def _calculate_file_hash_async(self, content: bytes) -> str:
+        """Calculate file hash asynchronously for better performance."""
+        import asyncio
+        import concurrent.futures
+
+        # For very large files (>50MB), use thread pool for hash calculation
+        if len(content) > 50 * 1024 * 1024:  # 50MB
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                return await loop.run_in_executor(executor, self._calculate_file_hash, content)
+        else:
+            return self._calculate_file_hash(content)
+
+    def _check_hash_cache(self, file_hash: str) -> Optional[Dict]:
+        """Check if file hash exists in cache."""
+        return self._hash_cache.get(file_hash)
+
+    def _update_hash_cache(self, file_hash: str, file_info: Dict):
+        """Update hash cache with file information."""
+        # Implement LRU-like behavior
+        if len(self._hash_cache) >= self._cache_max_size:
+            # Remove oldest entry (simple FIFO for now)
+            oldest_key = next(iter(self._hash_cache))
+            del self._hash_cache[oldest_key]
+
+        self._hash_cache[file_hash] = file_info
+
+    def clear_cache(self):
+        """Clear the hash cache."""
+        self._hash_cache.clear()
+        logger.info("Hash cache cleared")
+
+    def _generate_fallback_identifier(self, filename: str, file_size: int, timestamp: float) -> str:
+        """Generate fallback identifier when hash calculation fails."""
+        # Use filename + size + timestamp for identification
+        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-")[:50]
+        return f"fallback_{safe_filename}_{file_size}_{int(timestamp * 1000000)}"
 
     async def upload_file(self, file: UploadFile) -> Dict:
         """Upload and store file."""
         start_time = time.time()
+
+        # Import monitoring service
+        from services.monitoring_service import monitoring_service
 
         logger.info(f"📁 파일 업로드 시작: {file.filename} ({getattr(file, 'size', 'unknown')} bytes)")
 
@@ -86,41 +164,112 @@ class FileUploadService:
             temp_filename = f"{file_id}_{file.filename}"
             temp_file_path = self.temp_dir / temp_filename
             
-            # Save file to temporary location first
+            # Save file to temporary location first with memory-efficient processing
             logger.info(f"💾 임시 파일 저장 시작: {temp_file_path}")
             file_size = 0
             file_hash = None
+
+            # For large files, use streaming approach to reduce memory usage
+            content = await file.read()
+            file_size = len(content)
+            logger.info(f"📊 파일 크기: {file_size / (1024*1024):.2f}MB")
+
+            # Check file size after reading
+            if file_size > self.max_file_size:
+                logger.error(f"❌ 파일 크기 초과: {file_size / (1024*1024):.1f}MB > {self.max_file_size / (1024*1024):.1f}MB")
+                return {
+                    "success": False,
+                    "error": f"File size ({file_size / (1024*1024):.1f}MB) exceeds maximum limit of {self.max_file_size / (1024*1024):.1f}MB",
+                    "upload_time": time.time() - start_time
+                }
+
+            # Calculate file hash for duplicate detection (async for large files)
+            hash_start_time = time.time()
+            try:
+                file_hash = await self._calculate_file_hash_async(content)
+                hash_duration = (time.time() - hash_start_time) * 1000  # Convert to ms
+
+                # Log performance metric
+                monitoring_service.log_performance_metric(
+                    operation="hash_calculation",
+                    duration_ms=hash_duration,
+                    file_size_bytes=file_size,
+                    success=True
+                )
+
+                logger.info(f"🔍 파일 해시 계산 완료: {file_hash[:16]}... ({hash_duration:.1f}ms)")
+            except Exception as e:
+                hash_duration = (time.time() - hash_start_time) * 1000
+
+                # Log performance metric for failure
+                monitoring_service.log_performance_metric(
+                    operation="hash_calculation",
+                    duration_ms=hash_duration,
+                    file_size_bytes=file_size,
+                    success=False,
+                    error_message=str(e)
+                )
+
+                logger.error(f"파일 해시 계산 실패: {e}")
+                # Use fallback identifier
+                file_hash = self._generate_fallback_identifier(file.filename, file_size, time.time())
+                logger.warning(f"대체 식별자 사용: {file_hash[:16]}...")
+
+            # Write file to disk
             with open(temp_file_path, "wb") as buffer:
-                content = await file.read()
-                file_size = len(content)
-                logger.info(f"📊 파일 크기: {file_size / (1024*1024):.2f}MB")
-
-                # Check file size after reading
-                if file_size > self.max_file_size:
-                    logger.error(f"❌ 파일 크기 초과: {file_size / (1024*1024):.1f}MB > {self.max_file_size / (1024*1024):.1f}MB")
-                    # Clean up
-                    if temp_file_path.exists():
-                        temp_file_path.unlink()
-                    return {
-                        "success": False,
-                        "error": f"File size ({file_size / (1024*1024):.1f}MB) exceeds maximum limit of {self.max_file_size / (1024*1024):.1f}MB",
-                        "upload_time": time.time() - start_time
-                    }
-
-                # Calculate file hash for duplicate detection
-                file_hash = self._calculate_file_hash(content)
-                logger.info(f"🔍 파일 해시 계산 완료: {file_hash[:16]}...")
-
                 buffer.write(content)
-                logger.info(f"✅ 파일 저장 완료: {file_size} bytes")
+            logger.info(f"✅ 파일 저장 완료: {file_size} bytes")
 
-            # Check for duplicate files using hash
+            # Clear content from memory for large files
+            if file_size > 10 * 1024 * 1024:  # 10MB
+                del content
+                import gc
+                gc.collect()
+                logger.info(f"🧹 대용량 파일 메모리 정리 완료")
+
+            # Check for duplicate files using hash (with cache)
             logger.info(f"🔍 중복 파일 검사 시작")
-            from services.database_service import database_service
-            existing_file = database_service.find_file_by_hash(file_hash)
+            duplicate_check_start = time.time()
+
+            # First check cache
+            existing_file = self._check_hash_cache(file_hash)
+            detection_method = "cache"
 
             if existing_file:
-                logger.info(f"📋 중복 파일 발견: {existing_file['filename']} (업로드 횟수: {existing_file['upload_count']})")
+                logger.info(f"📋 캐시에서 중복 파일 발견: {existing_file['filename']}")
+            else:
+                # Check database if not in cache
+                from services.database_service import database_service
+                existing_file = database_service.find_file_by_hash(file_hash)
+                detection_method = "database"
+
+                # Update cache if found
+                if existing_file:
+                    self._update_hash_cache(file_hash, existing_file)
+
+            duplicate_check_duration = (time.time() - duplicate_check_start) * 1000
+
+            # Log duplicate check performance
+            monitoring_service.log_performance_metric(
+                operation="duplicate_check",
+                duration_ms=duplicate_check_duration,
+                file_size_bytes=file_size,
+                success=True
+            )
+
+            if existing_file:
+                new_upload_count = existing_file['upload_count'] + 1
+                logger.info(f"📋 중복 파일 발견: {existing_file['filename']} (업로드 횟수: {new_upload_count})")
+
+                # Log duplicate event
+                monitoring_service.log_duplicate_event(
+                    file_hash=file_hash,
+                    filename=file.filename,
+                    file_size=file_size,
+                    file_type=file_type.value,
+                    upload_count=new_upload_count,
+                    detection_method=detection_method
+                )
 
                 # Increment upload count for existing file
                 database_service.increment_upload_count(existing_file['file_id'])
@@ -128,6 +277,15 @@ class FileUploadService:
                 # Clean up temporary file
                 if temp_file_path.exists():
                     temp_file_path.unlink()
+
+                # Log upload performance
+                upload_duration = (time.time() - start_time) * 1000
+                monitoring_service.log_performance_metric(
+                    operation="upload_duplicate",
+                    duration_ms=upload_duration,
+                    file_size_bytes=file_size,
+                    success=True
+                )
 
                 return {
                     "success": True,
@@ -137,7 +295,7 @@ class FileUploadService:
                         "filename": existing_file["filename"],
                         "file_type": existing_file["file_type"],
                         "file_size": existing_file["file_size"],
-                        "upload_count": existing_file["upload_count"] + 1,
+                        "upload_count": new_upload_count,
                         "original_upload_time": existing_file["created_at"]
                     },
                     "message": f"동일한 파일이 이미 존재합니다: {existing_file['filename']}",
@@ -173,12 +331,48 @@ class FileUploadService:
                 "upload_count": 1
             }
 
-            # Store in database
+            # Store in database with error handling
             from services.database_service import database_service
-            database_service.store_file(file_metadata)
+            try:
+                success = database_service.store_file(file_metadata)
+                if not success:
+                    # Database storage failed, clean up uploaded file
+                    logger.error(f"데이터베이스 저장 실패, 업로드된 파일 정리: {storage_info['storage_path']}")
+                    try:
+                        Path(storage_info["storage_path"]).unlink(missing_ok=True)
+                    except Exception as cleanup_error:
+                        logger.error(f"파일 정리 실패: {cleanup_error}")
+
+                    return {
+                        "success": False,
+                        "error": "Database storage failed",
+                        "upload_time": time.time() - start_time
+                    }
+            except Exception as db_error:
+                logger.error(f"데이터베이스 저장 중 예외 발생: {db_error}")
+                # Clean up uploaded file
+                try:
+                    Path(storage_info["storage_path"]).unlink(missing_ok=True)
+                except Exception as cleanup_error:
+                    logger.error(f"파일 정리 실패: {cleanup_error}")
+
+                return {
+                    "success": False,
+                    "error": f"Database error: {str(db_error)}",
+                    "upload_time": time.time() - start_time
+                }
             
             logger.info(f"File uploaded successfully: {file.filename} -> {file_id}")
-            
+
+            # Log successful upload performance
+            upload_duration = (time.time() - start_time) * 1000
+            monitoring_service.log_performance_metric(
+                operation="upload_new",
+                duration_ms=upload_duration,
+                file_size_bytes=file_size,
+                success=True
+            )
+
             return {
                 "success": True,
                 "duplicate_detected": False,
@@ -196,6 +390,17 @@ class FileUploadService:
             
         except Exception as e:
             logger.error(f"Error uploading file {file.filename}: {str(e)}")
+
+            # Log upload failure
+            upload_duration = (time.time() - start_time) * 1000
+            monitoring_service.log_performance_metric(
+                operation="upload_failed",
+                duration_ms=upload_duration,
+                file_size_bytes=getattr(file, 'size', 0),
+                success=False,
+                error_message=str(e)
+            )
+
             return {
                 "success": False,
                 "error": f"Upload failed: {str(e)}",

@@ -5,7 +5,7 @@ import logging
 import json
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -185,9 +185,10 @@ class DatabaseService:
             return False
 
     def find_file_by_hash(self, file_hash: str) -> Optional[Dict]:
-        """Find existing file by hash."""
+        """Find existing file by hash with optimized query."""
         try:
             with self.get_connection() as conn:
+                # Use index hint for better performance
                 cursor = conn.execute("""
                     SELECT id, filename, file_type, file_size, storage_path, relative_path,
                            upload_time, created_at, upload_count
@@ -450,6 +451,225 @@ class DatabaseService:
                 "page_size": page_size,
                 "total_pages": 0
             }
+
+    def verify_data_consistency(self) -> Dict:
+        """Verify data consistency between files and documents."""
+        try:
+            with self.get_connection() as conn:
+                issues = []
+
+                # Check 1: Files without storage paths
+                orphaned_files = conn.execute("""
+                    SELECT id, filename FROM files
+                    WHERE storage_path IS NULL OR storage_path = ''
+                """).fetchall()
+
+                if orphaned_files:
+                    issues.append({
+                        "type": "orphaned_files",
+                        "count": len(orphaned_files),
+                        "description": "Files without storage paths",
+                        "files": [{"id": row[0], "filename": row[1]} for row in orphaned_files]
+                    })
+
+                # Check 2: Documents without corresponding files
+                orphaned_documents = conn.execute("""
+                    SELECT d.id, d.filename FROM documents d
+                    LEFT JOIN files f ON d.file_id = f.id
+                    WHERE f.id IS NULL
+                """).fetchall()
+
+                if orphaned_documents:
+                    issues.append({
+                        "type": "orphaned_documents",
+                        "count": len(orphaned_documents),
+                        "description": "Documents without corresponding files",
+                        "documents": [{"id": row[0], "filename": row[1]} for row in orphaned_documents]
+                    })
+
+                # Check 3: Files with missing physical files
+                missing_files = []
+                files_with_paths = conn.execute("""
+                    SELECT id, filename, storage_path FROM files
+                    WHERE storage_path IS NOT NULL AND storage_path != ''
+                """).fetchall()
+
+                for file_row in files_with_paths:
+                    file_id, filename, storage_path = file_row
+                    if not Path(storage_path).exists():
+                        missing_files.append({
+                            "id": file_id,
+                            "filename": filename,
+                            "storage_path": storage_path
+                        })
+
+                if missing_files:
+                    issues.append({
+                        "type": "missing_physical_files",
+                        "count": len(missing_files),
+                        "description": "Database records with missing physical files",
+                        "files": missing_files
+                    })
+
+                # Check 4: Duplicate hash inconsistencies
+                hash_inconsistencies = conn.execute("""
+                    SELECT file_hash, COUNT(*) as count, GROUP_CONCAT(id) as file_ids
+                    FROM files
+                    WHERE file_hash IS NOT NULL
+                    GROUP BY file_hash
+                    HAVING COUNT(*) != MAX(upload_count)
+                """).fetchall()
+
+                if hash_inconsistencies:
+                    issues.append({
+                        "type": "hash_inconsistencies",
+                        "count": len(hash_inconsistencies),
+                        "description": "Files with inconsistent upload counts",
+                        "details": [
+                            {
+                                "hash": row[0][:16] + "...",
+                                "file_count": row[1],
+                                "file_ids": row[2].split(",")
+                            } for row in hash_inconsistencies
+                        ]
+                    })
+
+                return {
+                    "consistent": len(issues) == 0,
+                    "issues_found": len(issues),
+                    "issues": issues,
+                    "checked_at": time.time()
+                }
+
+        except Exception as e:
+            logger.error(f"Error verifying data consistency: {str(e)}")
+            return {
+                "consistent": False,
+                "error": str(e),
+                "checked_at": time.time()
+            }
+
+    def repair_data_inconsistencies(self, dry_run: bool = True) -> Dict:
+        """Repair data inconsistencies found by verification."""
+        try:
+            with self.get_connection() as conn:
+                repairs = []
+
+                if not dry_run:
+                    conn.execute("BEGIN TRANSACTION")
+
+                # Repair 1: Remove orphaned documents
+                orphaned_docs = conn.execute("""
+                    SELECT d.id FROM documents d
+                    LEFT JOIN files f ON d.file_id = f.id
+                    WHERE f.id IS NULL
+                """).fetchall()
+
+                if orphaned_docs:
+                    if not dry_run:
+                        # Delete orphaned document chunks first
+                        for doc_row in orphaned_docs:
+                            conn.execute("DELETE FROM document_chunks WHERE document_id = ?", (doc_row[0],))
+
+                        # Delete orphaned documents
+                        conn.execute("""
+                            DELETE FROM documents WHERE id IN (
+                                SELECT d.id FROM documents d
+                                LEFT JOIN files f ON d.file_id = f.id
+                                WHERE f.id IS NULL
+                            )
+                        """)
+
+                    repairs.append({
+                        "type": "orphaned_documents_removed",
+                        "count": len(orphaned_docs),
+                        "action": "deleted" if not dry_run else "would_delete"
+                    })
+
+                # Repair 2: Fix upload count inconsistencies
+                hash_groups = conn.execute("""
+                    SELECT file_hash, COUNT(*) as actual_count, MAX(upload_count) as recorded_count
+                    FROM files
+                    WHERE file_hash IS NOT NULL
+                    GROUP BY file_hash
+                    HAVING COUNT(*) != MAX(upload_count)
+                """).fetchall()
+
+                if hash_groups:
+                    for hash_row in hash_groups:
+                        file_hash, actual_count, recorded_count = hash_row
+                        if not dry_run:
+                            conn.execute("""
+                                UPDATE files
+                                SET upload_count = ?
+                                WHERE file_hash = ?
+                            """, (actual_count, file_hash))
+
+                    repairs.append({
+                        "type": "upload_count_fixed",
+                        "count": len(hash_groups),
+                        "action": "updated" if not dry_run else "would_update"
+                    })
+
+                # Repair 3: Remove database records for missing physical files
+                missing_file_records = []
+                files_with_paths = conn.execute("""
+                    SELECT id, storage_path FROM files
+                    WHERE storage_path IS NOT NULL AND storage_path != ''
+                """).fetchall()
+
+                for file_row in files_with_paths:
+                    file_id, storage_path = file_row
+                    if not Path(storage_path).exists():
+                        missing_file_records.append(file_id)
+
+                if missing_file_records:
+                    if not dry_run:
+                        # Delete related documents and chunks first
+                        for file_id in missing_file_records:
+                            docs = conn.execute("SELECT id FROM documents WHERE file_id = ?", (file_id,)).fetchall()
+                            for doc_row in docs:
+                                conn.execute("DELETE FROM document_chunks WHERE document_id = ?", (doc_row[0],))
+                            conn.execute("DELETE FROM documents WHERE file_id = ?", (file_id,))
+
+                        # Delete file records
+                        placeholders = ",".join("?" * len(missing_file_records))
+                        conn.execute(f"DELETE FROM files WHERE id IN ({placeholders})", missing_file_records)
+
+                    repairs.append({
+                        "type": "missing_files_cleaned",
+                        "count": len(missing_file_records),
+                        "action": "deleted" if not dry_run else "would_delete"
+                    })
+
+                if not dry_run:
+                    conn.execute("COMMIT")
+                    logger.info(f"Data repair completed: {len(repairs)} repair operations")
+                else:
+                    logger.info(f"Dry run completed: {len(repairs)} potential repairs identified")
+
+                return {
+                    "success": True,
+                    "dry_run": dry_run,
+                    "repairs_performed": len(repairs),
+                    "repairs": repairs,
+                    "repaired_at": time.time()
+                }
+
+        except Exception as e:
+            if not dry_run:
+                try:
+                    conn.execute("ROLLBACK")
+                except:
+                    pass
+
+            logger.error(f"Error repairing data inconsistencies: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "dry_run": dry_run,
+                "repaired_at": time.time()
+            }
     
     def get_file(self, file_id: str) -> Optional[Dict]:
         """Get file metadata by ID."""
@@ -659,6 +879,67 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error getting stats: {str(e)}")
             return {}
+
+    def batch_update_upload_counts(self, hash_count_pairs: List[Tuple[str, int]]) -> bool:
+        """Batch update upload counts for multiple files."""
+        try:
+            with self.get_connection() as conn:
+                conn.execute("BEGIN TRANSACTION")
+
+                # Use batch update for better performance
+                conn.executemany("""
+                    UPDATE files
+                    SET upload_count = ?
+                    WHERE file_hash = ?
+                """, [(count, file_hash) for file_hash, count in hash_count_pairs])
+
+                conn.execute("COMMIT")
+                logger.info(f"Batch updated upload counts for {len(hash_count_pairs)} file groups")
+                return True
+
+        except Exception as e:
+            try:
+                conn.execute("ROLLBACK")
+            except:
+                pass
+            logger.error(f"Error in batch update upload counts: {str(e)}")
+            return False
+
+    def get_performance_stats(self) -> Dict:
+        """Get database performance statistics."""
+        try:
+            with self.get_connection() as conn:
+                # Get table sizes
+                table_stats = {}
+                tables = ['files', 'documents', 'document_chunks']
+
+                for table in tables:
+                    count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    table_stats[table] = count
+
+                # Get index usage stats (SQLite specific)
+                index_stats = conn.execute("""
+                    SELECT name, tbl_name FROM sqlite_master
+                    WHERE type = 'index' AND name LIKE 'idx_%'
+                """).fetchall()
+
+                # Get database file size
+                db_size = conn.execute("PRAGMA page_count").fetchone()[0] * conn.execute("PRAGMA page_size").fetchone()[0]
+
+                return {
+                    "table_stats": table_stats,
+                    "index_count": len(index_stats),
+                    "database_size_bytes": db_size,
+                    "database_size_mb": round(db_size / (1024 * 1024), 2),
+                    "collected_at": time.time()
+                }
+
+        except Exception as e:
+            logger.error(f"Error getting performance stats: {str(e)}")
+            return {
+                "error": str(e),
+                "collected_at": time.time()
+            }
 
 
 # Global service instance

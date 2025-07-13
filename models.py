@@ -511,6 +511,64 @@ class DuplicateListResponse(BaseModel):
     total_pages: int = Field(..., description="Total number of pages")
 
 
+class DataConsistencyResponse(BaseModel):
+    """Response for data consistency check."""
+
+    success: bool = Field(..., description="Whether the check was successful")
+    consistent: bool = Field(..., description="Whether data is consistent")
+    issues_found: int = Field(..., description="Number of issues found")
+    issues: List[Dict[str, Any]] = Field(..., description="List of consistency issues")
+    checked_at: float = Field(..., description="Timestamp when check was performed")
+    error: Optional[str] = Field(None, description="Error message if check failed")
+
+
+class DataRepairResponse(BaseModel):
+    """Response for data repair operation."""
+
+    success: bool = Field(..., description="Whether the repair was successful")
+    dry_run: bool = Field(..., description="Whether this was a dry run")
+    repairs_performed: int = Field(..., description="Number of repairs performed")
+    repairs: List[Dict[str, Any]] = Field(..., description="List of repairs performed")
+    repaired_at: float = Field(..., description="Timestamp when repair was performed")
+    error: Optional[str] = Field(None, description="Error message if repair failed")
+
+
+class MonitoringStatsResponse(BaseModel):
+    """Response for monitoring statistics."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    duplicate_detection: Dict[str, Any] = Field(..., description="Duplicate detection statistics")
+    performance: Dict[str, Any] = Field(..., description="Performance statistics")
+    system_info: Dict[str, Any] = Field(..., description="System information")
+
+
+class DuplicateAnalyticsResponse(BaseModel):
+    """Response for duplicate detection analytics."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    period_hours: int = Field(..., description="Analysis period in hours")
+    total_duplicates: int = Field(..., description="Total number of duplicates detected")
+    unique_files: int = Field(..., description="Number of unique files")
+    storage_saved_bytes: int = Field(..., description="Storage space saved in bytes")
+    storage_saved_mb: float = Field(..., description="Storage space saved in MB")
+    detection_methods: Dict[str, int] = Field(..., description="Distribution of detection methods")
+    file_types: Dict[str, int] = Field(..., description="Distribution of file types")
+    top_duplicated_files: List[Dict[str, Any]] = Field(..., description="Most duplicated files")
+    hourly_distribution: Dict[str, int] = Field(..., description="Hourly distribution of duplicates")
+
+
+class PerformanceAnalyticsResponse(BaseModel):
+    """Response for performance analytics."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    period_hours: int = Field(..., description="Analysis period in hours")
+    total_operations: int = Field(..., description="Total number of operations")
+    success_rate: float = Field(..., description="Success rate percentage")
+    average_duration_ms: float = Field(..., description="Average operation duration in milliseconds")
+    operations: Dict[str, Dict[str, float]] = Field(..., description="Per-operation statistics")
+    error_summary: Dict[str, int] = Field(..., description="Error summary by operation")
+
+
 class FileInfoResponse(BaseModel):
     """Response for file information."""
 

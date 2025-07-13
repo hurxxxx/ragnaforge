@@ -337,9 +337,38 @@ class DocumentProcessingService:
                 "created_at": time.time()
             }
 
-            # Store in database
+            # Store in database with error handling
             from services.database_service import database_service
-            database_service.store_document(processed_doc)
+            try:
+                success = database_service.store_document(processed_doc)
+                if not success:
+                    logger.error(f"문서 데이터베이스 저장 실패: {document_id}")
+                    # Clean up stored files
+                    try:
+                        Path(markdown_storage["storage_path"]).unlink(missing_ok=True)
+                        Path(chunks_storage["storage_path"]).unlink(missing_ok=True)
+                    except Exception as cleanup_error:
+                        logger.error(f"처리된 파일 정리 실패: {cleanup_error}")
+
+                    return {
+                        "success": False,
+                        "error": "Failed to store document in database",
+                        "processing_time": time.time() - start_time
+                    }
+            except Exception as db_error:
+                logger.error(f"문서 저장 중 예외 발생: {db_error}")
+                # Clean up stored files
+                try:
+                    Path(markdown_storage["storage_path"]).unlink(missing_ok=True)
+                    Path(chunks_storage["storage_path"]).unlink(missing_ok=True)
+                except Exception as cleanup_error:
+                    logger.error(f"처리된 파일 정리 실패: {cleanup_error}")
+
+                return {
+                    "success": False,
+                    "error": f"Database error during document storage: {str(db_error)}",
+                    "processing_time": time.time() - start_time
+                }
 
             # Store in unified search service if embeddings were generated
             if embeddings_generated and chunks:

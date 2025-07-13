@@ -21,6 +21,8 @@ from models import (
     VectorSearchRequest, VectorSearchResponse, QdrantStatsResponse,
     StorageStatsResponse, StorageFilesResponse, StorageCleanupResponse, FileInfoResponse,
     FileListResponse, FileInfo, DuplicateStatsResponse, DuplicateListResponse,
+    DataConsistencyResponse, DataRepairResponse,
+    MonitoringStatsResponse, DuplicateAnalyticsResponse, PerformanceAnalyticsResponse,
     SearchRequest, HybridSearchRequest, SearchResult, SearchResponse,
     HybridSearchResponse, SearchStatsResponse,
     RerankRequest, RerankResponse, RerankResult
@@ -658,6 +660,127 @@ async def list_duplicate_groups(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list duplicate groups: {str(e)}"
+        )
+
+
+@app.get("/v1/system/consistency", response_model=DataConsistencyResponse)
+async def check_data_consistency(
+    authorization: str = Depends(verify_api_key)
+):
+    """Check data consistency between database and file system."""
+    try:
+        result = database_service.verify_data_consistency()
+        return DataConsistencyResponse(**result)
+    except Exception as e:
+        logger.error(f"Error checking data consistency: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check data consistency: {str(e)}"
+        )
+
+
+@app.post("/v1/system/repair", response_model=DataRepairResponse)
+async def repair_data_inconsistencies(
+    dry_run: bool = True,
+    authorization: str = Depends(verify_api_key)
+):
+    """Repair data inconsistencies (dry_run=True for preview)."""
+    try:
+        result = database_service.repair_data_inconsistencies(dry_run=dry_run)
+        return DataRepairResponse(**result)
+    except Exception as e:
+        logger.error(f"Error repairing data inconsistencies: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to repair data inconsistencies: {str(e)}"
+        )
+
+
+@app.get("/v1/monitoring/stats", response_model=MonitoringStatsResponse)
+async def get_monitoring_stats(
+    hours: int = 24,
+    authorization: str = Depends(verify_api_key)
+):
+    """Get comprehensive monitoring statistics."""
+    try:
+        from services.monitoring_service import monitoring_service
+
+        stats = monitoring_service.export_statistics(hours=hours)
+        return MonitoringStatsResponse(
+            success=True,
+            **stats
+        )
+    except Exception as e:
+        logger.error(f"Error getting monitoring stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get monitoring stats: {str(e)}"
+        )
+
+
+@app.get("/v1/monitoring/duplicates", response_model=DuplicateAnalyticsResponse)
+async def get_duplicate_analytics(
+    hours: int = 24,
+    authorization: str = Depends(verify_api_key)
+):
+    """Get duplicate detection analytics."""
+    try:
+        from services.monitoring_service import monitoring_service
+
+        stats = monitoring_service.get_duplicate_statistics(hours=hours)
+        return DuplicateAnalyticsResponse(
+            success=True,
+            **stats
+        )
+    except Exception as e:
+        logger.error(f"Error getting duplicate analytics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get duplicate analytics: {str(e)}"
+        )
+
+
+@app.get("/v1/monitoring/performance", response_model=PerformanceAnalyticsResponse)
+async def get_performance_analytics(
+    hours: int = 24,
+    authorization: str = Depends(verify_api_key)
+):
+    """Get performance analytics."""
+    try:
+        from services.monitoring_service import monitoring_service
+
+        stats = monitoring_service.get_performance_statistics(hours=hours)
+        return PerformanceAnalyticsResponse(
+            success=True,
+            **stats
+        )
+    except Exception as e:
+        logger.error(f"Error getting performance analytics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get performance analytics: {str(e)}"
+        )
+
+
+@app.post("/v1/monitoring/cleanup")
+async def cleanup_monitoring_logs(
+    days_to_keep: int = 30,
+    authorization: str = Depends(verify_api_key)
+):
+    """Clean up old monitoring logs."""
+    try:
+        from services.monitoring_service import monitoring_service
+
+        monitoring_service.cleanup_old_logs(days_to_keep=days_to_keep)
+        return {
+            "success": True,
+            "message": f"Cleaned up logs older than {days_to_keep} days"
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up monitoring logs: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cleanup monitoring logs: {str(e)}"
         )
 
 
