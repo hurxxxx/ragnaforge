@@ -196,6 +196,43 @@ class DocumentProcessingService:
                     "error": f"File not found: {file_id}",
                     "processing_time": time.time() - start_time
                 }
+
+            # Check if this is a duplicate file and if it's already been processed
+            from services.database_service import database_service
+            file_hash = file_info.get("file_hash")
+
+            if file_hash:
+                logger.info(f"🔍 중복 문서 검사 시작: {file_hash[:16]}...")
+                existing_document = database_service.find_document_by_file_hash(file_hash)
+
+                if existing_document:
+                    logger.info(f"📋 기존 처리된 문서 발견: {existing_document['filename']} (문서 ID: {existing_document['id']})")
+
+                    # Return existing document information
+                    return {
+                        "success": True,
+                        "duplicate_detected": True,
+                        "existing_document": True,
+                        "file_id": file_id,
+                        "document_id": existing_document["id"],
+                        "filename": file_info["filename"],
+                        "original_filename": existing_document["filename"],
+                        "conversion_method": existing_document["conversion_method"],
+                        "conversion_time": existing_document["conversion_time"],
+                        "markdown_content": existing_document["markdown_content"],
+                        "markdown_length": existing_document.get("markdown_length", 0),
+                        "total_chunks": existing_document.get("total_chunks", 0),
+                        "chunks": existing_document.get("chunks", []),
+                        "embeddings_generated": existing_document.get("embeddings_generated", False),
+                        "processing_time": time.time() - start_time,
+                        "original_processing_time": existing_document.get("processing_time", 0),
+                        "original_created_at": existing_document.get("created_at", 0),
+                        "message": f"동일한 파일이 이미 처리되었습니다: {existing_document['filename']}"
+                    }
+                else:
+                    logger.info(f"✅ 새로운 파일 - 문서 처리 진행")
+            else:
+                logger.warning(f"⚠️ 파일 해시 정보 없음 - 중복 검사 스킵")
             
             file_path = Path(file_info["temp_path"])
             if not file_path.exists():
@@ -309,44 +346,57 @@ class DocumentProcessingService:
                 try:
                     from services.unified_search_service import unified_search_service
 
-                    # Prepare documents for unified search service
-                    documents = []
-                    for i, chunk in enumerate(chunks):
-                        # 청킹 서비스에서 text 필드에 텍스트를 저장하므로 이를 content로 매핑
-                        chunk_text = chunk.get("text", "")
-                        doc = {
-                            "id": f"{document_id}_chunk_{i}",
-                            "document_id": document_id,
-                            "embedding": chunk.get("embedding"),
-                            "content": chunk_text,  # text 필드를 content로 매핑
-                            "title": file_info["filename"],
-                            "file_name": file_info["filename"],
-                            "file_type": file_type.value,
-                            "chunk_index": i,
-                            "file_size": file_info.get("size", 0),
-                            "created_at": time.time(),
-                            "metadata": {
-                                "filename": file_info["filename"],
-                                "file_type": file_type.value,
-                                "conversion_method": method,
-                                "created_at": time.time(),
-                                "embedding_model": embedding_model,
-                                "document_id": document_id,
-                                "chunk_index": i,
-                                "text": chunk_text,  # Qdrant용 text 필드
-                                "content": chunk_text  # MeiliSearch용 content 필드
-                            }
-                        }
-                        documents.append(doc)
+                    # Check if document with same hash already exists in vector DB
+                    if file_hash:
+                        logger.info(f"🔍 벡터 DB 중복 검사 시작")
+                        existing_in_vector_db = await unified_search_service.check_document_exists_by_hash(file_hash)
 
-                    # Store in unified search service (both vector and text backends)
-                    logger.info(f"💾 통합 검색 서비스에 문서 저장 시작: {len(documents)}개 청크")
-                    unified_success = await unified_search_service.store_documents(documents)
+                        if existing_in_vector_db:
+                            logger.info(f"📋 벡터 DB에 동일 문서 존재 - 저장 스킵: {existing_in_vector_db}")
+                        else:
+                            logger.info(f"✅ 벡터 DB에 새 문서 저장 진행")
 
-                    if unified_success:
-                        logger.info(f"✅ 통합 검색 서비스 저장 완료: {document_id}")
+                            # Prepare documents for unified search service
+                            documents = []
+                            for i, chunk in enumerate(chunks):
+                                # 청킹 서비스에서 text 필드에 텍스트를 저장하므로 이를 content로 매핑
+                                chunk_text = chunk.get("text", "")
+                                doc = {
+                                    "id": f"{document_id}_chunk_{i}",
+                                    "document_id": document_id,
+                                    "embedding": chunk.get("embedding"),
+                                    "content": chunk_text,  # text 필드를 content로 매핑
+                                    "title": file_info["filename"],
+                                    "file_name": file_info["filename"],
+                                    "file_type": file_type.value,
+                                    "chunk_index": i,
+                                    "file_size": file_info.get("size", 0),
+                                    "created_at": time.time(),
+                                    "metadata": {
+                                        "filename": file_info["filename"],
+                                        "file_type": file_type.value,
+                                        "conversion_method": method,
+                                        "created_at": time.time(),
+                                        "embedding_model": embedding_model,
+                                        "document_id": document_id,
+                                        "chunk_index": i,
+                                        "text": chunk_text,  # Qdrant용 text 필드
+                                        "content": chunk_text,  # MeiliSearch용 content 필드
+                                        "file_hash": file_hash  # 중복 검사용 해시 추가
+                                    }
+                                }
+                                documents.append(doc)
+
+                            # Store in unified search service (both vector and text backends)
+                            logger.info(f"💾 통합 검색 서비스에 문서 저장 시작: {len(documents)}개 청크")
+                            unified_success = await unified_search_service.store_documents(documents)
+
+                            if unified_success:
+                                logger.info(f"✅ 통합 검색 서비스 저장 완료: {document_id}")
+                            else:
+                                logger.error(f"❌ 통합 검색 서비스 저장 실패: {document_id}")
                     else:
-                        logger.error(f"❌ 통합 검색 서비스 저장 실패: {document_id}")
+                        logger.warning(f"⚠️ 파일 해시 없음 - 벡터 DB 중복 검사 스킵")
 
                 except Exception as e:
                     logger.error(f"Error storing chunks in unified search service: {str(e)}")

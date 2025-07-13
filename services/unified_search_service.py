@@ -145,7 +145,33 @@ class UnifiedSearchService:
         except Exception as e:
             logger.error(f"Error storing documents: {str(e)}")
             return False
-    
+
+    async def check_document_exists_by_hash(self, file_hash: str) -> Optional[str]:
+        """Check if a document with the given file hash already exists in vector DB."""
+        try:
+            if not self._initialized:
+                logger.error("Service not initialized")
+                return None
+
+            # Search for documents with this file hash in metadata
+            # We'll use a simple metadata filter search
+            if hasattr(self.vector_backend, 'search_by_metadata'):
+                results = await self.vector_backend.search_by_metadata({"file_hash": file_hash})
+                if results:
+                    return results[0].get("document_id")
+
+            # Fallback: search in text backend
+            if hasattr(self.text_backend, 'search_by_metadata'):
+                results = await self.text_backend.search_by_metadata({"file_hash": file_hash})
+                if results:
+                    return results[0].get("document_id")
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error checking document existence by hash: {str(e)}")
+            return None
+
     async def vector_search(self,
                           query: str,
                           limit: int = 10,

@@ -343,6 +343,14 @@ class DocumentProcessResponse(BaseModel):
     processing_time: float = Field(..., description="Total processing time")
     error: Optional[str] = Field(None, description="Error message if processing failed")
 
+    # Duplicate detection fields
+    duplicate_detected: Optional[bool] = Field(False, description="Whether a duplicate document was detected")
+    existing_document: Optional[bool] = Field(False, description="Whether this document was already processed")
+    original_filename: Optional[str] = Field(None, description="Original filename of the existing document")
+    original_processing_time: Optional[float] = Field(None, description="Processing time of the original document")
+    original_created_at: Optional[float] = Field(None, description="Creation time of the original document")
+    message: Optional[str] = Field(None, description="Additional message about duplicate detection")
+
 
 # Vector Search Models
 class VectorSearchRequest(BaseModel):
@@ -436,6 +444,71 @@ class StorageCleanupResponse(BaseModel):
     success: bool = Field(..., description="Whether the cleanup was successful")
     deleted_count: int = Field(..., description="Number of files deleted")
     max_age_hours: int = Field(..., description="Maximum age in hours for cleanup")
+
+
+class FileInfo(BaseModel):
+    """File information with duplicate detection data."""
+
+    file_id: str = Field(..., description="Unique file identifier")
+    filename: str = Field(..., description="Original filename")
+    file_type: str = Field(..., description="File type")
+    file_size: int = Field(..., description="File size in bytes")
+    upload_time: float = Field(..., description="Upload timestamp")
+    created_at: float = Field(..., description="Creation timestamp")
+
+    # Duplicate detection fields
+    file_hash: Optional[str] = Field(None, description="SHA-256 hash of the file")
+    upload_count: int = Field(1, description="Number of times this file has been uploaded")
+    is_duplicate: bool = Field(False, description="Whether this file is a duplicate")
+
+    # Processing status
+    is_processed: bool = Field(False, description="Whether this file has been processed")
+    document_id: Optional[str] = Field(None, description="Associated document ID if processed")
+
+
+class FileListResponse(BaseModel):
+    """Response for file listing."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    files: List[FileInfo] = Field(..., description="List of files")
+    total: int = Field(..., description="Total number of files")
+    page: int = Field(..., description="Current page number")
+    page_size: int = Field(..., description="Number of files per page")
+    total_pages: int = Field(..., description="Total number of pages")
+
+
+class DuplicateGroup(BaseModel):
+    """Information about a group of duplicate files."""
+
+    file_hash: str = Field(..., description="SHA-256 hash of the duplicate files")
+    files: List[FileInfo] = Field(..., description="List of duplicate files")
+    total_uploads: int = Field(..., description="Total number of uploads for this content")
+    first_uploaded: float = Field(..., description="Timestamp of first upload")
+    last_uploaded: float = Field(..., description="Timestamp of last upload")
+    is_processed: bool = Field(False, description="Whether any file in this group has been processed")
+    document_id: Optional[str] = Field(None, description="Associated document ID if processed")
+
+
+class DuplicateStatsResponse(BaseModel):
+    """Response for duplicate file statistics."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    total_files: int = Field(..., description="Total number of files")
+    unique_files: int = Field(..., description="Number of unique files (by hash)")
+    duplicate_groups: int = Field(..., description="Number of duplicate groups")
+    total_duplicates: int = Field(..., description="Total number of duplicate files")
+    storage_saved_bytes: int = Field(..., description="Storage space saved by deduplication")
+
+
+class DuplicateListResponse(BaseModel):
+    """Response for listing duplicate file groups."""
+
+    success: bool = Field(..., description="Whether the request was successful")
+    duplicate_groups: List[DuplicateGroup] = Field(..., description="List of duplicate groups")
+    total_groups: int = Field(..., description="Total number of duplicate groups")
+    page: int = Field(..., description="Current page number")
+    page_size: int = Field(..., description="Number of groups per page")
+    total_pages: int = Field(..., description="Total number of pages")
 
 
 class FileInfoResponse(BaseModel):

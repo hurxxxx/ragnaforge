@@ -20,6 +20,7 @@ from models import (
     FileUploadResponse, DocumentProcessRequest, DocumentProcessResponse,
     VectorSearchRequest, VectorSearchResponse, QdrantStatsResponse,
     StorageStatsResponse, StorageFilesResponse, StorageCleanupResponse, FileInfoResponse,
+    FileListResponse, FileInfo, DuplicateStatsResponse, DuplicateListResponse,
     SearchRequest, HybridSearchRequest, SearchResult, SearchResponse,
     HybridSearchResponse, SearchStatsResponse,
     RerankRequest, RerankResponse, RerankResult
@@ -551,6 +552,39 @@ async def get_document(
         )
 
 
+@app.get("/v1/files", response_model=FileListResponse)
+async def list_files(
+    page: int = 1,
+    page_size: int = 100,
+    authorization: str = Depends(verify_api_key)
+):
+    """List uploaded files with duplicate information."""
+    try:
+        if page < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Page number must be >= 1"
+            )
+
+        if page_size < 1 or page_size > 1000:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Page size must be between 1 and 1000"
+            )
+
+        result = database_service.list_files(page=page, page_size=page_size)
+        return FileListResponse(
+            success=True,
+            **result
+        )
+    except Exception as e:
+        logger.error(f"Error listing files: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list files: {str(e)}"
+        )
+
+
 @app.delete("/v1/files/{file_id}")
 async def delete_file(
     file_id: str,
@@ -572,6 +606,58 @@ async def delete_file(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete file: {str(e)}"
+        )
+
+
+@app.get("/v1/duplicates/stats", response_model=DuplicateStatsResponse)
+async def get_duplicate_stats(
+    authorization: str = Depends(verify_api_key)
+):
+    """Get statistics about duplicate files."""
+    try:
+        stats = database_service.get_duplicate_stats()
+        return DuplicateStatsResponse(
+            success=True,
+            **stats
+        )
+    except Exception as e:
+        logger.error(f"Error getting duplicate stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get duplicate stats: {str(e)}"
+        )
+
+
+@app.get("/v1/duplicates", response_model=DuplicateListResponse)
+async def list_duplicate_groups(
+    page: int = 1,
+    page_size: int = 50,
+    authorization: str = Depends(verify_api_key)
+):
+    """List groups of duplicate files."""
+    try:
+        if page < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Page number must be >= 1"
+            )
+
+        if page_size < 1 or page_size > 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Page size must be between 1 and 100"
+            )
+
+        result = database_service.list_duplicate_groups(page=page, page_size=page_size)
+        return DuplicateListResponse(
+            success=True,
+            **result
+        )
+    except Exception as e:
+        logger.error(f"Error listing duplicate groups: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list duplicate groups: {str(e)}"
         )
 
 

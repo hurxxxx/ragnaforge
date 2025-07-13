@@ -231,6 +231,225 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error incrementing upload count: {str(e)}")
             return False
+
+    def find_document_by_file_hash(self, file_hash: str) -> Optional[Dict]:
+        """Find existing processed document by file hash."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT d.* FROM documents d
+                    JOIN files f ON d.file_id = f.id
+                    WHERE f.file_hash = ?
+                    ORDER BY d.created_at DESC
+                    LIMIT 1
+                """, (file_hash,))
+
+                row = cursor.fetchone()
+                if row:
+                    document = dict(row)
+
+                    # Get chunks for this document
+                    chunk_rows = conn.execute("""
+                        SELECT * FROM document_chunks
+                        WHERE document_id = ?
+                        ORDER BY chunk_index
+                    """, (document["id"],)).fetchall()
+
+                    document["chunks"] = [dict(chunk_row) for chunk_row in chunk_rows]
+                    return document
+                return None
+        except Exception as e:
+            logger.error(f"Error finding document by file hash: {str(e)}")
+            return None
+
+    def list_files(self, page: int = 1, page_size: int = 100) -> Dict:
+        """List files with pagination and duplicate information."""
+        try:
+            offset = (page - 1) * page_size
+
+            with self.get_connection() as conn:
+                # Get total count
+                total = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+
+                # Get files with processing status
+                rows = conn.execute("""
+                    SELECT f.id, f.filename, f.file_type, f.file_size, f.upload_time,
+                           f.created_at, f.file_hash, f.upload_count,
+                           d.id as document_id
+                    FROM files f
+                    LEFT JOIN documents d ON f.id = d.file_id
+                    ORDER BY f.created_at DESC
+                    LIMIT ? OFFSET ?
+                """, (page_size, offset)).fetchall()
+
+                files = []
+                for row in rows:
+                    file_info = {
+                        "file_id": row[0],
+                        "filename": row[1],
+                        "file_type": row[2],
+                        "file_size": row[3],
+                        "upload_time": row[4],
+                        "created_at": row[5],
+                        "file_hash": row[6],
+                        "upload_count": row[7] or 1,
+                        "is_duplicate": (row[7] or 1) > 1,
+                        "is_processed": row[8] is not None,
+                        "document_id": row[8]
+                    }
+                    files.append(file_info)
+
+                return {
+                    "files": files,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (total + page_size - 1) // page_size
+                }
+        except Exception as e:
+            logger.error(f"Error listing files: {str(e)}")
+            return {"files": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
+
+    def get_duplicate_stats(self) -> Dict:
+        """Get statistics about duplicate files."""
+        try:
+            with self.get_connection() as conn:
+                # Total files
+                total_files = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+
+                # Unique files (by hash)
+                unique_files = conn.execute("""
+                    SELECT COUNT(DISTINCT file_hash) FROM files
+                    WHERE file_hash IS NOT NULL
+                """).fetchone()[0]
+
+                # Duplicate groups (files with upload_count > 1)
+                duplicate_groups = conn.execute("""
+                    SELECT COUNT(*) FROM files
+                    WHERE upload_count > 1
+                """).fetchone()[0]
+
+                # Total duplicates (sum of upload_count - 1 for each file)
+                total_duplicates_result = conn.execute("""
+                    SELECT SUM(upload_count - 1) FROM files
+                    WHERE upload_count > 1
+                """).fetchone()[0]
+                total_duplicates = total_duplicates_result or 0
+
+                # Storage saved (estimate: duplicate count * average file size)
+                avg_size_result = conn.execute("""
+                    SELECT AVG(file_size) FROM files
+                    WHERE upload_count > 1
+                """).fetchone()[0]
+                avg_size = avg_size_result or 0
+                storage_saved = int(total_duplicates * avg_size)
+
+                return {
+                    "total_files": total_files,
+                    "unique_files": unique_files,
+                    "duplicate_groups": duplicate_groups,
+                    "total_duplicates": total_duplicates,
+                    "storage_saved_bytes": storage_saved
+                }
+        except Exception as e:
+            logger.error(f"Error getting duplicate stats: {str(e)}")
+            return {
+                "total_files": 0,
+                "unique_files": 0,
+                "duplicate_groups": 0,
+                "total_duplicates": 0,
+                "storage_saved_bytes": 0
+            }
+
+    def list_duplicate_groups(self, page: int = 1, page_size: int = 50) -> Dict:
+        """List groups of duplicate files."""
+        try:
+            offset = (page - 1) * page_size
+
+            with self.get_connection() as conn:
+                # Get duplicate file hashes (upload_count > 1)
+                hash_rows = conn.execute("""
+                    SELECT file_hash, upload_count, MIN(created_at) as first_uploaded,
+                           MAX(upload_time) as last_uploaded
+                    FROM files
+                    WHERE upload_count > 1 AND file_hash IS NOT NULL
+                    GROUP BY file_hash
+                    ORDER BY upload_count DESC, first_uploaded DESC
+                    LIMIT ? OFFSET ?
+                """, (page_size, offset)).fetchall()
+
+                # Get total count
+                total_groups = conn.execute("""
+                    SELECT COUNT(DISTINCT file_hash) FROM files
+                    WHERE upload_count > 1 AND file_hash IS NOT NULL
+                """).fetchone()[0]
+
+                duplicate_groups = []
+                for hash_row in hash_rows:
+                    file_hash = hash_row[0]
+
+                    # Get all files with this hash
+                    file_rows = conn.execute("""
+                        SELECT f.id, f.filename, f.file_type, f.file_size, f.upload_time,
+                               f.created_at, f.file_hash, f.upload_count,
+                               d.id as document_id
+                        FROM files f
+                        LEFT JOIN documents d ON f.id = d.file_id
+                        WHERE f.file_hash = ?
+                        ORDER BY f.created_at ASC
+                    """, (file_hash,)).fetchall()
+
+                    files = []
+                    is_processed = False
+                    document_id = None
+
+                    for file_row in file_rows:
+                        file_info = {
+                            "file_id": file_row[0],
+                            "filename": file_row[1],
+                            "file_type": file_row[2],
+                            "file_size": file_row[3],
+                            "upload_time": file_row[4],
+                            "created_at": file_row[5],
+                            "file_hash": file_row[6],
+                            "upload_count": file_row[7],
+                            "is_duplicate": True,
+                            "is_processed": file_row[8] is not None,
+                            "document_id": file_row[8]
+                        }
+                        files.append(file_info)
+
+                        if file_row[8] is not None:
+                            is_processed = True
+                            document_id = file_row[8]
+
+                    group = {
+                        "file_hash": file_hash,
+                        "files": files,
+                        "total_uploads": hash_row[1],
+                        "first_uploaded": hash_row[2],
+                        "last_uploaded": hash_row[3],
+                        "is_processed": is_processed,
+                        "document_id": document_id
+                    }
+                    duplicate_groups.append(group)
+
+                return {
+                    "duplicate_groups": duplicate_groups,
+                    "total_groups": total_groups,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (total_groups + page_size - 1) // page_size
+                }
+        except Exception as e:
+            logger.error(f"Error listing duplicate groups: {str(e)}")
+            return {
+                "duplicate_groups": [],
+                "total_groups": 0,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": 0
+            }
     
     def get_file(self, file_id: str) -> Optional[Dict]:
         """Get file metadata by ID."""
