@@ -296,8 +296,8 @@ class UnifiedSearchService:
                 "search_time": time.time() - start_time
             }
     
-    async def text_search(self, 
-                         query: str, 
+    async def text_search(self,
+                         query: str,
                          limit: int = 10,
                          offset: int = 0,
                          filters: Optional[Dict[str, Any]] = None,
@@ -305,11 +305,11 @@ class UnifiedSearchService:
                          highlight: bool = False) -> Dict[str, Any]:
         """Perform text search only."""
         start_time = time.time()
-        
+
         try:
             if not self._initialized:
                 return {"success": False, "error": "Service not initialized"}
-            
+
             # Search in text backend
             results = await self.text_backend.search_text(
                 query=query,
@@ -319,20 +319,44 @@ class UnifiedSearchService:
                 sort=sort,
                 highlight=highlight
             )
-            
+
             search_time = time.time() - start_time
-            
+
+            # Convert raw results to SearchResult format
+            formatted_results = []
+            for item in results.get("hits", []):
+
+                # Extract highlights if available and convert to proper format
+                highlights = None
+                if highlight and "_formatted" in item:
+                    formatted_data = item["_formatted"]
+                    highlights = {}
+                    # Convert MeiliSearch formatted fields to List[str] format
+                    for field, value in formatted_data.items():
+                        if isinstance(value, str):
+                            # Convert all string values to list format as expected by SearchResult model
+                            highlights[field] = [value]
+
+                formatted_result = {
+                    "id": str(item.get("id", item.get("document_id", ""))),
+                    "score": 1.0,  # Text search might not have explicit scores
+                    "metadata": item,
+                    "content": item.get("content", item.get("text", "")),
+                    "highlights": highlights,
+                    "search_source": "text"
+                }
+                formatted_results.append(formatted_result)
+
             return {
                 "success": True,
-                "results": results.get("hits", []),
-                "total": results.get("total", 0),
+                "results": formatted_results,
+                "total_results": results.get("total", 0),
                 "search_type": "text",
                 "query": query,
                 "search_time": search_time,
-                "backend": self.text_backend.backend_name,
-                "processing_time_ms": results.get("processing_time_ms", 0)
+                "backend": self.text_backend.backend_name
             }
-            
+
         except Exception as e:
             logger.error(f"Text search failed: {str(e)}")
             return {
