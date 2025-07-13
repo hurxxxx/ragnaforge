@@ -202,12 +202,14 @@ class UnifiedSearchService:
                         rerank_docs.append(doc)
 
                     # Perform reranking
+                    logger.info(f"🔄 Rerank 시작: {len(rerank_docs)}개 문서")
                     rerank_result = await rerank_service.rerank_documents(
                         query=query,
                         documents=rerank_docs,
                         top_k=limit,
                         use_cache=True
                     )
+                    logger.info(f"✅ Rerank 완료: {rerank_result.get('processing_time', 0):.3f}초")
 
                     if rerank_result.get("success", False):
                         # Convert reranked results back to original format
@@ -355,6 +357,7 @@ class UnifiedSearchService:
                 highlight=highlight
             )
 
+            logger.info(f"🔍 하이브리드 검색 시작: 벡터 + 텍스트 병렬 검색")
             vector_result, text_result = await asyncio.gather(vector_task, text_task, return_exceptions=True)
 
             # Handle exceptions
@@ -369,6 +372,7 @@ class UnifiedSearchService:
             # Extract results
             vector_results = vector_result.get("results", []) if vector_result.get("success") else []
             text_results = text_result.get("results", []) if text_result.get("success") else []
+            logger.info(f"✅ 병렬 검색 완료: 벡터 {len(vector_results)}개, 텍스트 {len(text_results)}개")
 
             # Determine initial limit for merging (get more results if reranking)
             merge_limit = limit

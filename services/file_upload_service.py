@@ -57,32 +57,41 @@ class FileUploadService:
         """Upload and store file."""
         start_time = time.time()
 
+        logger.info(f"📁 파일 업로드 시작: {file.filename} ({getattr(file, 'size', 'unknown')} bytes)")
+
         try:
             # Validate file
             is_valid, error_msg = self._validate_file(file)
             if not is_valid:
+                logger.error(f"❌ 파일 검증 실패: {error_msg}")
                 return {
                     "success": False,
                     "error": error_msg,
                     "upload_time": time.time() - start_time
                 }
 
+            logger.info(f"✅ 파일 검증 통과: {file.content_type}")
+
             # Generate unique file ID
             file_id = str(uuid.uuid4())
             file_type = self._get_file_type(file.filename)
+            logger.info(f"🆔 파일 ID 생성: {file_id}, 타입: {file_type}")
 
             # Create temporary filename for initial upload
             temp_filename = f"{file_id}_{file.filename}"
             temp_file_path = self.temp_dir / temp_filename
             
             # Save file to temporary location first
+            logger.info(f"💾 임시 파일 저장 시작: {temp_file_path}")
             file_size = 0
             with open(temp_file_path, "wb") as buffer:
                 content = await file.read()
                 file_size = len(content)
+                logger.info(f"📊 파일 크기: {file_size / (1024*1024):.2f}MB")
 
                 # Check file size after reading
                 if file_size > self.max_file_size:
+                    logger.error(f"❌ 파일 크기 초과: {file_size / (1024*1024):.1f}MB > {self.max_file_size / (1024*1024):.1f}MB")
                     # Clean up
                     if temp_file_path.exists():
                         temp_file_path.unlink()
@@ -93,8 +102,10 @@ class FileUploadService:
                     }
 
                 buffer.write(content)
+                logger.info(f"✅ 파일 저장 완료: {file_size} bytes")
             
             # Move file to organized storage using storage service
+            logger.info(f"📂 스토리지 서비스로 파일 이동 시작")
             from services.storage_service import storage_service
             storage_info = storage_service.store_uploaded_file(
                 file_id=file_id,
@@ -102,6 +113,7 @@ class FileUploadService:
                 file_type=file_type.value,
                 temp_file_path=str(temp_file_path)
             )
+            logger.info(f"✅ 스토리지 저장 완료: {storage_info.get('file_path', 'N/A')}")
 
             upload_time = time.time() - start_time
 

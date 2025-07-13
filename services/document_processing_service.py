@@ -44,13 +44,18 @@ class DocumentProcessingService:
             with open(file_path, 'r', encoding='latin-1') as f:
                 return f.read()
     
-    async def _convert_document(self, file_path: Path, file_type: SupportedFileType, 
+    async def _convert_document(self, file_path: Path, file_type: SupportedFileType,
                                method: str, extract_images: bool = False) -> Dict:
         """Convert document to markdown."""
+        logger.info(f"📄 문서 변환 시작: {file_path.name} (타입: {file_type.value}, 방법: {method})")
+        start_time = time.time()
+
         try:
             if file_type in [SupportedFileType.TXT, SupportedFileType.MD]:
                 # For text files, just read the content
+                logger.info(f"📖 텍스트 파일 직접 읽기")
                 content = self._read_text_file(file_path)
+                logger.info(f"✅ 텍스트 읽기 완료: {len(content)} 문자")
                 return {
                     "success": True,
                     "markdown_content": content,
@@ -60,13 +65,16 @@ class DocumentProcessingService:
                 }
             
             elif file_type == SupportedFileType.PDF:
+                logger.info(f"📄 PDF 변환 시작 - 방법: {method}")
                 if method == "marker":
+                    logger.info(f"🔄 Marker 서비스로 PDF 변환 중...")
                     result = marker_service.convert_pdf_to_markdown(
                         pdf_path=str(file_path),
                         output_dir="temp_processing",
                         extract_images=extract_images
                     )
                 else:  # docling
+                    logger.info(f"🔄 Docling 서비스로 PDF 변환 중...")
                     result = docling_service.convert_pdf_to_markdown(
                         pdf_path=str(file_path),
                         output_dir="temp_processing",
@@ -74,14 +82,18 @@ class DocumentProcessingService:
                     )
                 
                 if result.get("success"):
+                    conversion_time = time.time() - start_time
+                    markdown_length = result.get("markdown_length", 0)
+                    logger.info(f"✅ PDF 변환 성공: {markdown_length} 문자, {conversion_time:.2f}초")
                     return {
                         "success": True,
                         "markdown_content": result.get("markdown", ""),
-                        "markdown_length": result.get("markdown_length", 0),
-                        "conversion_time": result.get("conversion_time", 0),
+                        "markdown_length": markdown_length,
+                        "conversion_time": conversion_time,
                         "method_used": method
                     }
                 else:
+                    logger.error(f"❌ PDF 변환 실패: {result.get('error', 'Conversion failed')}")
                     return {
                         "success": False,
                         "error": result.get("error", "Conversion failed"),
@@ -200,7 +212,22 @@ class DocumentProcessingService:
             embedding_model = embedding_model or settings.default_model
             
             # Choose conversion method
-            file_type = file_info["file_type"]
+            file_type_str = file_info["file_type"]
+            # Convert string to SupportedFileType enum
+            try:
+                file_type = SupportedFileType(file_type_str.lower())
+            except ValueError:
+                # Fallback for common extensions
+                if file_type_str.lower() == "pdf":
+                    file_type = SupportedFileType.PDF
+                elif file_type_str.lower() in ["txt", "text"]:
+                    file_type = SupportedFileType.TXT
+                elif file_type_str.lower() in ["md", "markdown"]:
+                    file_type = SupportedFileType.MD
+                else:
+                    file_type = SupportedFileType.PDF  # Default fallback
+
+            logger.info(f"📋 파일 타입 확인: {file_type_str} -> {file_type}")
             method = self._choose_conversion_method(file_type, conversion_method)
             
             # Convert document
@@ -218,12 +245,19 @@ class DocumentProcessingService:
             markdown_content = conversion_result["markdown_content"]
             
             # Chunk text
+            logger.info(f"✂️ 텍스트 청킹 시작: 전략={chunk_strategy}, 크기={chunk_size}, 오버랩={overlap}")
             chunks = self._chunk_text(markdown_content, chunk_strategy, chunk_size, overlap)
-            
+            logger.info(f"✅ 청킹 완료: {len(chunks)}개 청크 생성")
+
             # Generate embeddings if requested
             embeddings_generated = False
             if generate_embeddings and chunks:
+                logger.info(f"🔢 임베딩 생성 시작: 모델={embedding_model}")
                 embeddings_generated = self._generate_embeddings(chunks, embedding_model)
+                if embeddings_generated:
+                    logger.info(f"✅ 임베딩 생성 완료")
+                else:
+                    logger.warning(f"⚠️ 임베딩 생성 실패")
             
             # Generate document ID
             document_id = str(uuid.uuid4())
@@ -287,13 +321,13 @@ class DocumentProcessingService:
                             "content": chunk_text,  # text 필드를 content로 매핑
                             "title": file_info["filename"],
                             "file_name": file_info["filename"],
-                            "file_type": file_type,
+                            "file_type": file_type.value,
                             "chunk_index": i,
                             "file_size": file_info.get("size", 0),
                             "created_at": time.time(),
                             "metadata": {
                                 "filename": file_info["filename"],
-                                "file_type": file_type,
+                                "file_type": file_type.value,
                                 "conversion_method": method,
                                 "created_at": time.time(),
                                 "embedding_model": embedding_model,
@@ -306,12 +340,13 @@ class DocumentProcessingService:
                         documents.append(doc)
 
                     # Store in unified search service (both vector and text backends)
+                    logger.info(f"💾 통합 검색 서비스에 문서 저장 시작: {len(documents)}개 청크")
                     unified_success = await unified_search_service.store_documents(documents)
 
                     if unified_success:
-                        logger.info(f"Document chunks stored in unified search service: {document_id}")
+                        logger.info(f"✅ 통합 검색 서비스 저장 완료: {document_id}")
                     else:
-                        logger.warning(f"Failed to store chunks in unified search service: {document_id}")
+                        logger.error(f"❌ 통합 검색 서비스 저장 실패: {document_id}")
 
                 except Exception as e:
                     logger.error(f"Error storing chunks in unified search service: {str(e)}")
