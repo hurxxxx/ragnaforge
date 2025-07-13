@@ -29,7 +29,19 @@ async def upload_file(
     """Upload a file for processing."""
     try:
         result = await file_upload_service.upload_file(file)
+
+        # Check if upload failed due to validation (e.g., empty file)
+        if not result.get("success", True):
+            error_msg = result.get("error", "Upload failed")
+            if "Empty files are not allowed" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error_msg
+                )
+
         return FileUploadResponse(**result)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in file upload: {str(e)}")
         raise HTTPException(

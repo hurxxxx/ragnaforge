@@ -54,11 +54,11 @@ class FileUploadService:
         file_type = self._get_file_type(file.filename)
         if not file_type:
             return False, f"Unsupported file type. Supported types: {', '.join([ft.value for ft in SupportedFileType])}"
-        
+
         # Check file size (if we can get it)
         if hasattr(file, 'size') and file.size and file.size > self.max_file_size:
             return False, f"File size exceeds maximum limit of {self.max_file_size / (1024*1024):.1f}MB"
-        
+
         return True, None
 
     def _calculate_file_hash(self, content: bytes) -> str:
@@ -173,6 +173,27 @@ class FileUploadService:
             content = await file.read()
             file_size = len(content)
             logger.info(f"📊 파일 크기: {file_size / (1024*1024):.2f}MB")
+
+            # Check for empty files
+            if file_size == 0:
+                logger.error(f"❌ 빈 파일 거부: {file.filename}")
+                return {
+                    "success": False,
+                    "file_id": "",
+                    "filename": file.filename,
+                    "file_type": self._get_file_type(file.filename).value if self._get_file_type(file.filename) else "unknown",
+                    "file_size": 0,
+                    "upload_time": time.time() - start_time,
+                    "temp_path": "",
+                    "storage_path": None,
+                    "relative_path": None,
+                    "error": "Empty files are not allowed. Please upload a file with content.",
+                    "duplicate_detected": False,
+                    "existing_file": None,
+                    "file_hash": None,
+                    "upload_count": 0,
+                    "message": None
+                }
 
             # Check file size after reading
             if file_size > self.max_file_size:

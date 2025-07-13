@@ -356,8 +356,8 @@ class DocumentProcessResponse(BaseModel):
 class VectorSearchRequest(BaseModel):
     """Request for vector similarity search."""
 
-    query: str = Field(..., description="Search query text")
-    limit: int = Field(10, description="Maximum number of results", ge=1, le=100)
+    query: str = Field(..., description="Search query text", min_length=1)
+    limit: int = Field(10, description="Maximum number of results", ge=1, le=1000)
     score_threshold: float = Field(0.0, description="Minimum similarity score", ge=0.0, le=1.0)
     document_filter: Optional[Dict[str, Any]] = Field(
         None,
@@ -580,13 +580,13 @@ class FileInfoResponse(BaseModel):
 class SearchRequest(BaseModel):
     """Request model for unified search."""
 
-    query: str = Field(..., description="Search query", example="인공지능 기술 문서")
+    query: str = Field(..., description="Search query", example="인공지능 기술 문서", min_length=1)
     search_type: str = Field(
         "hybrid",
         description="Type of search to perform",
         example="hybrid"
     )
-    limit: int = Field(10, description="Maximum number of results", ge=1, le=100)
+    limit: int = Field(10, description="Maximum number of results", ge=1, le=1000)
     offset: int = Field(0, description="Number of results to skip", ge=0)
     score_threshold: float = Field(0.0, description="Minimum similarity score", ge=0.0, le=1.0)
     filters: Optional[Dict[str, Any]] = Field(None, description="Search filters")
