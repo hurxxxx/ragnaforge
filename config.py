@@ -90,6 +90,16 @@ class Settings(BaseSettings):
     temp_dir: str = "temp"
     max_file_size_mb: int = 50
 
+    # Rerank Configuration
+    rerank_enabled: bool = True
+    rerank_model: str = "dragonkue/bge-reranker-v2-m3-ko"
+    rerank_model_type: str = "bge_m3_ko"
+    rerank_top_k: int = 100  # Number of documents to rerank from initial search
+    rerank_batch_size: int = 32
+    rerank_device: Optional[str] = None  # Auto-detect if None
+    rerank_cache_enabled: bool = True
+    rerank_cache_size: int = 1000  # Number of cached rerank results
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

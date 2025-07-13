@@ -21,7 +21,8 @@ from models import (
     VectorSearchRequest, VectorSearchResponse, QdrantStatsResponse,
     StorageStatsResponse, StorageFilesResponse, StorageCleanupResponse, FileInfoResponse,
     SearchRequest, HybridSearchRequest, SearchResult, SearchResponse,
-    HybridSearchResponse, SearchStatsResponse
+    HybridSearchResponse, SearchStatsResponse,
+    RerankRequest, RerankResponse, RerankResult
 )
 from services import embedding_service, chunking_service
 from services.marker_service import marker_service
@@ -33,6 +34,7 @@ from services.qdrant_service import qdrant_service
 from services.search_service import search_service
 from services.unified_search_service import unified_search_service
 from services.storage_service import storage_service
+from services.rerank_service import rerank_service
 
 # Configure logging
 logging.basicConfig(
@@ -68,6 +70,14 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning("⚠️ Unified search service initialization failed")
 
+        # Initialize rerank service
+        logger.info("🔧 Initializing rerank service...")
+        rerank_init = await rerank_service.initialize()
+        if rerank_init:
+            logger.info("✅ Rerank service initialized successfully")
+        else:
+            logger.warning("⚠️ Rerank service initialization failed")
+
         startup_time = time.time() - start_time
         logger.info(f"Default model {settings.default_model} loaded successfully in {startup_time:.2f}s")
         logger.info("🚀 KURE API service is ready!")
@@ -82,6 +92,9 @@ async def lifespan(app: FastAPI):
     try:
         # Clean up old uploaded files
         file_upload_service.cleanup_old_files(max_age_hours=24)
+
+        # Clean up rerank service
+        await rerank_service.cleanup()
 
         # Clean up memory
         embedding_service.cleanup_memory()
@@ -668,7 +681,9 @@ async def unified_vector_search(
             limit=request.limit,
             score_threshold=request.score_threshold,
             filters=request.filters,
-            embedding_model=request.embedding_model
+            embedding_model=request.embedding_model,
+            rerank=request.rerank,
+            rerank_top_k=request.rerank_top_k
         )
 
         if not result.get("success"):
@@ -791,7 +806,9 @@ async def unified_hybrid_search(
             score_threshold=request.score_threshold,
             filters=request.filters,
             embedding_model=request.embedding_model,
-            highlight=request.highlight
+            highlight=request.highlight,
+            rerank=request.rerank,
+            rerank_top_k=request.rerank_top_k
         )
 
         if not result.get("success"):
@@ -982,6 +999,145 @@ async def get_file_info(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get file info: {str(e)}"
+        )
+
+
+# Rerank API Endpoints
+@app.post("/v1/rerank", response_model=RerankResponse)
+async def rerank_documents(
+    request: RerankRequest,
+    authorization: str = Depends(verify_api_key)
+):
+    """Re-rank documents based on query relevance using cross-encoder models."""
+    try:
+        # Convert RerankDocument to dict format expected by service
+        documents = []
+        for doc in request.documents:
+            doc_dict = {
+                "id": doc.id,
+                "text": doc.text,
+                "score": doc.score,
+                "metadata": doc.metadata or {}
+            }
+            documents.append(doc_dict)
+
+        # Perform reranking
+        result = await rerank_service.rerank_documents(
+            query=request.query,
+            documents=documents,
+            top_k=request.top_k,
+            use_cache=True
+        )
+
+        if not result.get("success", False):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Reranking failed")
+            )
+
+        # Convert results to RerankResult format
+        rerank_results = []
+        for doc in result["documents"]:
+            rerank_result = RerankResult(
+                id=doc.get("id"),
+                text=doc["text"],
+                score=doc["score"],
+                rerank_score=doc.get("rerank_score", doc["score"]),
+                original_score=doc.get("original_score"),
+                rank_position=doc.get("final_rank", doc.get("rank_position", 1)),
+                metadata=doc.get("metadata", {})
+            )
+            rerank_results.append(rerank_result)
+
+        return RerankResponse(
+            success=True,
+            results=rerank_results,
+            query=request.query,
+            total_count=result.get("original_count", len(request.documents)),
+            reranked_count=result.get("reranked_count", len(rerank_results)),
+            processing_time=result.get("processing_time", 0.0),
+            model_info=result.get("model_info", {}),
+            rerank_applied=result.get("rerank_applied", True),
+            from_cache=result.get("from_cache", False)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in rerank endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Rerank operation failed: {str(e)}"
+        )
+
+
+@app.get("/v1/rerank/models")
+async def get_rerank_models(authorization: str = Depends(verify_api_key)):
+    """Get information about available rerank models."""
+    try:
+        from services.rerank.rerank_factory import RerankFactory
+
+        available_models = RerankFactory.get_available_models()
+        current_model = rerank_service.get_model_info()
+
+        return {
+            "success": True,
+            "available_models": available_models,
+            "current_model": current_model,
+            "rerank_enabled": rerank_service.is_enabled()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting rerank models: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get rerank models: {str(e)}"
+        )
+
+
+@app.get("/v1/rerank/stats")
+async def get_rerank_stats(authorization: str = Depends(verify_api_key)):
+    """Get rerank service statistics and cache information."""
+    try:
+        model_info = rerank_service.get_model_info()
+        cache_stats = rerank_service.get_cache_stats()
+
+        return {
+            "success": True,
+            "enabled": rerank_service.is_enabled(),
+            "model_info": model_info,
+            "cache_stats": cache_stats,
+            "settings": {
+                "rerank_enabled": getattr(settings, 'rerank_enabled', True),
+                "rerank_model": getattr(settings, 'rerank_model', 'dragonkue/bge-reranker-v2-m3-ko'),
+                "rerank_top_k": getattr(settings, 'rerank_top_k', 100),
+                "rerank_batch_size": getattr(settings, 'rerank_batch_size', 32)
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting rerank stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get rerank stats: {str(e)}"
+        )
+
+
+@app.post("/v1/rerank/cache/clear")
+async def clear_rerank_cache(authorization: str = Depends(verify_api_key)):
+    """Clear the rerank cache."""
+    try:
+        rerank_service.clear_cache()
+        return {
+            "success": True,
+            "message": "Rerank cache cleared successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Error clearing rerank cache: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear rerank cache: {str(e)}"
         )
 
 

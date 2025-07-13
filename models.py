@@ -454,6 +454,8 @@ class SearchRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = Field(None, description="Search filters")
     embedding_model: Optional[str] = Field(None, description="Embedding model to use")
     highlight: bool = Field(False, description="Whether to highlight search terms")
+    rerank: bool = Field(False, description="Whether to apply reranking to results")
+    rerank_top_k: Optional[int] = Field(None, description="Number of top results to consider for reranking")
 
     model_config = {
         "json_schema_extra": {
@@ -537,3 +539,140 @@ class SearchStatsResponse(BaseModel):
     vector_backend: Dict[str, Any] = Field(..., description="Vector backend statistics")
     text_backend: Dict[str, Any] = Field(..., description="Text backend statistics")
     available_backends: Dict[str, List[str]] = Field(..., description="Available backends")
+
+
+# Rerank Models
+class RerankDocument(BaseModel):
+    """Individual document for reranking."""
+
+    id: Optional[str] = Field(None, description="Document or chunk ID")
+    text: str = Field(..., description="Document text content")
+    score: Optional[float] = Field(None, description="Original relevance score")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Document metadata")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "id": "doc_123_chunk_1",
+                "text": "인공지능 기술의 발전으로 자연어 처리 분야가 크게 발전했습니다.",
+                "score": 0.85,
+                "metadata": {
+                    "file_name": "ai_report.pdf",
+                    "chunk_index": 1
+                }
+            }
+        }
+    }
+
+
+class RerankRequest(BaseModel):
+    """Request model for document reranking."""
+
+    query: str = Field(..., description="Search query for reranking")
+    documents: List[RerankDocument] = Field(
+        ...,
+        description="List of documents to rerank",
+        min_items=1,
+        max_items=1000
+    )
+    top_k: Optional[int] = Field(
+        None,
+        description="Number of top results to return (None for all)",
+        ge=1,
+        le=1000
+    )
+    model: Optional[str] = Field(
+        None,
+        description="Rerank model to use (uses default if not specified)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "query": "인공지능 기술 동향",
+                "documents": [
+                    {
+                        "id": "doc1",
+                        "text": "인공지능 기술의 최신 동향과 발전 방향",
+                        "score": 0.8
+                    },
+                    {
+                        "id": "doc2",
+                        "text": "머신러닝과 딥러닝의 실제 적용 사례",
+                        "score": 0.7
+                    }
+                ],
+                "top_k": 10
+            }
+        }
+    }
+
+
+class RerankResult(BaseModel):
+    """Individual reranked document result."""
+
+    id: Optional[str] = Field(None, description="Document or chunk ID")
+    text: str = Field(..., description="Document text content")
+    score: float = Field(..., description="Rerank relevance score")
+    rerank_score: float = Field(..., description="Cross-encoder rerank score")
+    original_score: Optional[float] = Field(None, description="Original search score")
+    rank_position: int = Field(..., description="Position in reranked results")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Document metadata")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "id": "doc1",
+                "text": "인공지능 기술의 최신 동향과 발전 방향",
+                "score": 0.92,
+                "rerank_score": 0.92,
+                "original_score": 0.8,
+                "rank_position": 1,
+                "metadata": {
+                    "file_name": "ai_report.pdf"
+                }
+            }
+        }
+    }
+
+
+class RerankResponse(BaseModel):
+    """Response model for document reranking."""
+
+    success: bool = Field(..., description="Whether reranking was successful")
+    results: List[RerankResult] = Field(..., description="Reranked documents")
+    query: str = Field(..., description="Original search query")
+    total_count: int = Field(..., description="Total number of input documents")
+    reranked_count: int = Field(..., description="Number of documents returned")
+    processing_time: float = Field(..., description="Time taken for reranking")
+    model_info: Dict[str, Any] = Field(..., description="Information about the rerank model used")
+    rerank_applied: bool = Field(..., description="Whether reranking was actually applied")
+    from_cache: Optional[bool] = Field(None, description="Whether result was served from cache")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "success": True,
+                "results": [
+                    {
+                        "id": "doc1",
+                        "text": "인공지능 기술의 최신 동향과 발전 방향",
+                        "score": 0.92,
+                        "rerank_score": 0.92,
+                        "original_score": 0.8,
+                        "rank_position": 1
+                    }
+                ],
+                "query": "인공지능 기술 동향",
+                "total_count": 2,
+                "reranked_count": 1,
+                "processing_time": 0.045,
+                "model_info": {
+                    "model_name": "dragonkue/bge-reranker-v2-m3-ko",
+                    "model_type": "cross_encoder"
+                },
+                "rerank_applied": True,
+                "from_cache": False
+            }
+        }
+    }

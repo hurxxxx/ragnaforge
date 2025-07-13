@@ -81,17 +81,31 @@ def main():
         "통합 테스트 실행"
     )
     results.append(("통합 테스트", success, exec_time))
-    
-    # 4. 전체 테스트 실행 (다른 테스트 파일이 있는 경우)
+
+    # 4. Rerank 서비스 테스트 실행
+    success, exec_time = run_command(
+        "python -m pytest tests/test_rerank_service.py -v -s --tb=short",
+        "Rerank 서비스 테스트 실행"
+    )
+    results.append(("Rerank 테스트", success, exec_time))
+
+    # 5. Search + Rerank 통합 테스트 실행
+    success, exec_time = run_command(
+        "python -m pytest tests/test_search_with_rerank.py -v -s --tb=short",
+        "Search + Rerank 통합 테스트 실행"
+    )
+    results.append(("통합 테스트", success, exec_time))
+
+    # 6. 전체 테스트 실행 (다른 테스트 파일이 있는 경우)
     success, exec_time = run_command(
         "python -m pytest tests/ -v --tb=short",
         "전체 테스트 실행"
     )
     results.append(("전체 테스트", success, exec_time))
     
-    # 5. 서비스 헬스 체크
+    # 7. 서비스 헬스 체크
     success, exec_time = run_command(
-        "python -c \"from services.qdrant_service import qdrant_service; health = qdrant_service.health_check(); print(f'Qdrant: {health}')\"",
+        "python -c \"from services.qdrant_service import qdrant_service; from services.rerank_service import rerank_service; from services.unified_search_service import unified_search_service; health = qdrant_service.health_check(); print(f'Qdrant: {health}'); print(f'Rerank enabled: {rerank_service.is_enabled()}'); print(f'Unified Search: {unified_search_service.is_initialized}')\"",
         "서비스 헬스 체크"
     )
     results.append(("헬스 체크", success, exec_time))

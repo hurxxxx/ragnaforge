@@ -16,6 +16,7 @@ from .search_factory import SearchBackendFactory, VectorBackendType, TextBackend
 from .interfaces.vector_search_interface import VectorSearchInterface
 from .interfaces.text_search_interface import TextSearchInterface
 from . import embedding_service
+from .rerank_service import rerank_service
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -145,12 +146,14 @@ class UnifiedSearchService:
             logger.error(f"Error storing documents: {str(e)}")
             return False
     
-    async def vector_search(self, 
-                          query: str, 
+    async def vector_search(self,
+                          query: str,
                           limit: int = 10,
                           score_threshold: float = 0.0,
                           filters: Optional[Dict[str, Any]] = None,
-                          embedding_model: Optional[str] = None) -> Dict[str, Any]:
+                          embedding_model: Optional[str] = None,
+                          rerank: bool = False,
+                          rerank_top_k: Optional[int] = None) -> Dict[str, Any]:
         """Perform vector similarity search only."""
         start_time = time.time()
         
@@ -168,25 +171,94 @@ class UnifiedSearchService:
             # Convert to list
             query_vector = query_embeddings[0].tolist() if hasattr(query_embeddings[0], 'tolist') else list(query_embeddings[0])
             
+            # Determine search limit (get more results if reranking)
+            search_limit = limit
+            if rerank and rerank_service.is_enabled():
+                search_limit = rerank_top_k or getattr(settings, 'rerank_top_k', 100)
+                search_limit = max(search_limit, limit * 2)  # Ensure we get enough results
+
             # Search in vector backend
             results = await self.vector_backend.search_similar(
                 query_vector=query_vector,
-                limit=limit,
+                limit=search_limit,
                 score_threshold=score_threshold,
                 filters=filters
             )
-            
+
+            # Apply reranking if requested and enabled
+            rerank_applied = False
+            rerank_info = {}
+            if rerank and rerank_service.is_enabled() and results:
+                try:
+                    # Convert results to rerank format
+                    rerank_docs = []
+                    for result in results:
+                        doc = {
+                            "id": result.get("id", ""),
+                            "text": result.get("content", result.get("text", "")),
+                            "score": result.get("score", 0.0),
+                            "metadata": result.get("metadata", {})
+                        }
+                        rerank_docs.append(doc)
+
+                    # Perform reranking
+                    rerank_result = await rerank_service.rerank_documents(
+                        query=query,
+                        documents=rerank_docs,
+                        top_k=limit,
+                        use_cache=True
+                    )
+
+                    if rerank_result.get("success", False):
+                        # Convert reranked results back to original format
+                        reranked_results = []
+                        for doc in rerank_result["documents"]:
+                            # Find original result and update with rerank score
+                            original_result = next(
+                                (r for r in results if r.get("id") == doc.get("id")),
+                                None
+                            )
+                            if original_result:
+                                updated_result = original_result.copy()
+                                updated_result["score"] = doc.get("rerank_score", doc.get("score", 0.0))
+                                updated_result["original_score"] = doc.get("original_score", 0.0)
+                                updated_result["rerank_score"] = doc.get("rerank_score", 0.0)
+                                updated_result["rank_position"] = doc.get("rank_position", 1)
+                                reranked_results.append(updated_result)
+
+                        results = reranked_results
+                        rerank_applied = True
+                        rerank_info = {
+                            "processing_time": rerank_result.get("processing_time", 0.0),
+                            "original_count": rerank_result.get("original_count", 0),
+                            "reranked_count": rerank_result.get("reranked_count", 0),
+                            "model_info": rerank_result.get("model_info", {}),
+                            "from_cache": rerank_result.get("from_cache", False)
+                        }
+
+                        logger.info(f"Reranking applied: {len(rerank_docs)} -> {len(results)} results")
+
+                except Exception as e:
+                    logger.error(f"Reranking failed, using original results: {str(e)}")
+
             search_time = time.time() - start_time
-            
-            return {
+
+            response = {
                 "success": True,
                 "results": results,
                 "search_type": "vector",
                 "query": query,
                 "total_results": len(results),
                 "search_time": search_time,
-                "backend": self.vector_backend.backend_name
+                "backend": self.vector_backend.backend_name,
+                "rerank_applied": rerank_applied
             }
+
+            # Add rerank info if applied
+            if rerank_applied:
+                response["rerank_info"] = rerank_info
+
+            return response
             
         except Exception as e:
             logger.error(f"Vector search failed: {str(e)}")
@@ -249,7 +321,9 @@ class UnifiedSearchService:
                           score_threshold: float = 0.0,
                           filters: Optional[Dict[str, Any]] = None,
                           embedding_model: Optional[str] = None,
-                          highlight: bool = False) -> Dict[str, Any]:
+                          highlight: bool = False,
+                          rerank: bool = False,
+                          rerank_top_k: Optional[int] = None) -> Dict[str, Any]:
         """Perform hybrid search combining vector and text search."""
         start_time = time.time()
 
@@ -296,18 +370,85 @@ class UnifiedSearchService:
             vector_results = vector_result.get("results", []) if vector_result.get("success") else []
             text_results = text_result.get("results", []) if text_result.get("success") else []
 
+            # Determine initial limit for merging (get more results if reranking)
+            merge_limit = limit
+            if rerank and rerank_service.is_enabled():
+                merge_limit = rerank_top_k or getattr(settings, 'rerank_top_k', 100)
+                merge_limit = max(merge_limit, limit * 2)  # Ensure we get enough results
+
             # Merge and rank results
             merged_results = self._merge_search_results(
                 vector_results=vector_results,
                 text_results=text_results,
                 vector_weight=vector_weight,
                 text_weight=text_weight,
-                limit=limit
+                limit=merge_limit
             )
+
+            # Apply reranking if requested and enabled
+            rerank_applied = False
+            rerank_info = {}
+            if rerank and rerank_service.is_enabled() and merged_results:
+                try:
+                    # Convert merged results to rerank format
+                    rerank_docs = []
+                    for result in merged_results:
+                        doc = {
+                            "id": result.get("id", ""),
+                            "text": result.get("content", result.get("text", "")),
+                            "score": result.get("hybrid_score", result.get("score", 0.0)),
+                            "metadata": result.get("metadata", {})
+                        }
+                        # Preserve hybrid search metadata
+                        doc["metadata"]["hybrid_score"] = result.get("hybrid_score", 0.0)
+                        doc["metadata"]["vector_score"] = result.get("vector_score", 0.0)
+                        doc["metadata"]["text_score"] = result.get("text_score", 0.0)
+                        doc["metadata"]["search_source"] = result.get("search_source", "")
+                        rerank_docs.append(doc)
+
+                    # Perform reranking
+                    rerank_result = await rerank_service.rerank_documents(
+                        query=query,
+                        documents=rerank_docs,
+                        top_k=limit,
+                        use_cache=True
+                    )
+
+                    if rerank_result.get("success", False):
+                        # Convert reranked results back to original format
+                        reranked_results = []
+                        for doc in rerank_result["documents"]:
+                            # Find original result and update with rerank score
+                            original_result = next(
+                                (r for r in merged_results if r.get("id") == doc.get("id")),
+                                None
+                            )
+                            if original_result:
+                                updated_result = original_result.copy()
+                                updated_result["score"] = doc.get("rerank_score", doc.get("score", 0.0))
+                                updated_result["rerank_score"] = doc.get("rerank_score", 0.0)
+                                updated_result["original_hybrid_score"] = original_result.get("hybrid_score", 0.0)
+                                updated_result["rank_position"] = doc.get("rank_position", 1)
+                                reranked_results.append(updated_result)
+
+                        merged_results = reranked_results
+                        rerank_applied = True
+                        rerank_info = {
+                            "processing_time": rerank_result.get("processing_time", 0.0),
+                            "original_count": rerank_result.get("original_count", 0),
+                            "reranked_count": rerank_result.get("reranked_count", 0),
+                            "model_info": rerank_result.get("model_info", {}),
+                            "from_cache": rerank_result.get("from_cache", False)
+                        }
+
+                        logger.info(f"Hybrid search reranking applied: {len(rerank_docs)} -> {len(merged_results)} results")
+
+                except Exception as e:
+                    logger.error(f"Hybrid search reranking failed, using original results: {str(e)}")
 
             search_time = time.time() - start_time
 
-            return {
+            response = {
                 "success": True,
                 "results": merged_results,
                 "search_type": "hybrid",
@@ -323,8 +464,15 @@ class UnifiedSearchService:
                 "backends": {
                     "vector": self.vector_backend.backend_name,
                     "text": self.text_backend.backend_name
-                }
+                },
+                "rerank_applied": rerank_applied
             }
+
+            # Add rerank info if applied
+            if rerank_applied:
+                response["rerank_info"] = rerank_info
+
+            return response
 
         except Exception as e:
             logger.error(f"Hybrid search failed: {str(e)}")
