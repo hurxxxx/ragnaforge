@@ -4,6 +4,7 @@ import os
 import uuid
 import time
 import shutil
+import hashlib
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -52,7 +53,11 @@ class FileUploadService:
             return False, f"File size exceeds maximum limit of {self.max_file_size / (1024*1024):.1f}MB"
         
         return True, None
-    
+
+    def _calculate_file_hash(self, content: bytes) -> str:
+        """Calculate SHA-256 hash of file content."""
+        return hashlib.sha256(content).hexdigest()
+
     async def upload_file(self, file: UploadFile) -> Dict:
         """Upload and store file."""
         start_time = time.time()
@@ -84,6 +89,7 @@ class FileUploadService:
             # Save file to temporary location first
             logger.info(f"💾 임시 파일 저장 시작: {temp_file_path}")
             file_size = 0
+            file_hash = None
             with open(temp_file_path, "wb") as buffer:
                 content = await file.read()
                 file_size = len(content)
@@ -101,8 +107,42 @@ class FileUploadService:
                         "upload_time": time.time() - start_time
                     }
 
+                # Calculate file hash for duplicate detection
+                file_hash = self._calculate_file_hash(content)
+                logger.info(f"🔍 파일 해시 계산 완료: {file_hash[:16]}...")
+
                 buffer.write(content)
                 logger.info(f"✅ 파일 저장 완료: {file_size} bytes")
+
+            # Check for duplicate files using hash
+            logger.info(f"🔍 중복 파일 검사 시작")
+            from services.database_service import database_service
+            existing_file = database_service.find_file_by_hash(file_hash)
+
+            if existing_file:
+                logger.info(f"📋 중복 파일 발견: {existing_file['filename']} (업로드 횟수: {existing_file['upload_count']})")
+
+                # Increment upload count for existing file
+                database_service.increment_upload_count(existing_file['file_id'])
+
+                # Clean up temporary file
+                if temp_file_path.exists():
+                    temp_file_path.unlink()
+
+                return {
+                    "success": True,
+                    "duplicate_detected": True,
+                    "existing_file": {
+                        "file_id": existing_file["file_id"],
+                        "filename": existing_file["filename"],
+                        "file_type": existing_file["file_type"],
+                        "file_size": existing_file["file_size"],
+                        "upload_count": existing_file["upload_count"] + 1,
+                        "original_upload_time": existing_file["created_at"]
+                    },
+                    "message": f"동일한 파일이 이미 존재합니다: {existing_file['filename']}",
+                    "upload_time": time.time() - start_time
+                }
             
             # Move file to organized storage using storage service
             logger.info(f"📂 스토리지 서비스로 파일 이동 시작")
@@ -128,7 +168,9 @@ class FileUploadService:
                 "storage_path": storage_info["storage_path"],
                 "relative_path": storage_info["relative_path"],
                 "upload_time": upload_time,
-                "created_at": time.time()
+                "created_at": time.time(),
+                "file_hash": file_hash,
+                "upload_count": 1
             }
 
             # Store in database
@@ -139,6 +181,7 @@ class FileUploadService:
             
             return {
                 "success": True,
+                "duplicate_detected": False,
                 "file_id": file_id,
                 "filename": file.filename,
                 "file_type": file_type,
@@ -146,7 +189,9 @@ class FileUploadService:
                 "upload_time": upload_time,
                 "temp_path": storage_info["storage_path"],  # Return organized storage path
                 "storage_path": storage_info["storage_path"],
-                "relative_path": storage_info["relative_path"]
+                "relative_path": storage_info["relative_path"],
+                "file_hash": file_hash,
+                "upload_count": 1
             }
             
         except Exception as e:

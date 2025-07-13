@@ -282,6 +282,13 @@ class FileUploadResponse(BaseModel):
     relative_path: Optional[str] = Field(None, description="Relative path from storage base")
     error: Optional[str] = Field(None, description="Error message if upload failed")
 
+    # Duplicate detection fields
+    duplicate_detected: Optional[bool] = Field(False, description="Whether a duplicate file was detected")
+    existing_file: Optional[dict] = Field(None, description="Information about existing duplicate file")
+    file_hash: Optional[str] = Field(None, description="SHA-256 hash of the file")
+    upload_count: Optional[int] = Field(1, description="Number of times this file has been uploaded")
+    message: Optional[str] = Field(None, description="Additional message about the upload")
+
 
 class DocumentProcessRequest(BaseModel):
     """Request for processing uploaded document."""

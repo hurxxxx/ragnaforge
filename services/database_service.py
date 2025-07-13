@@ -77,6 +77,14 @@ class DatabaseService:
                 conn.execute("ALTER TABLE files ADD COLUMN relative_path TEXT")
             except:
                 pass  # Column already exists
+            try:
+                conn.execute("ALTER TABLE files ADD COLUMN file_hash TEXT")
+            except:
+                pass  # Column already exists
+            try:
+                conn.execute("ALTER TABLE files ADD COLUMN upload_count INTEGER DEFAULT 1")
+            except:
+                pass  # Column already exists
             
             # Documents table for processed documents
             conn.execute("""
@@ -132,6 +140,7 @@ class DatabaseService:
                 "CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at)",
                 "CREATE INDEX IF NOT EXISTS idx_files_file_type ON files(file_type)",
                 "CREATE INDEX IF NOT EXISTS idx_files_status ON files(status)",
+                "CREATE INDEX IF NOT EXISTS idx_files_hash ON files(file_hash)",
                 "CREATE INDEX IF NOT EXISTS idx_documents_file_id ON documents(file_id)",
                 "CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at)",
                 "CREATE INDEX IF NOT EXISTS idx_documents_file_type ON documents(file_type)",
@@ -152,8 +161,8 @@ class DatabaseService:
             with self.get_connection() as conn:
                 conn.execute("""
                     INSERT INTO files
-                    (id, filename, safe_filename, file_type, file_size, temp_path, storage_path, relative_path, upload_time, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, filename, safe_filename, file_type, file_size, temp_path, storage_path, relative_path, upload_time, created_at, file_hash, upload_count)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     file_data["file_id"],
                     file_data["filename"],
@@ -164,13 +173,63 @@ class DatabaseService:
                     file_data.get("storage_path"),
                     file_data.get("relative_path"),
                     file_data["upload_time"],
-                    file_data["created_at"]
+                    file_data["created_at"],
+                    file_data.get("file_hash"),
+                    file_data.get("upload_count", 1)
                 ))
                 conn.commit()
                 logger.info(f"File stored in database: {file_data['file_id']}")
                 return True
         except Exception as e:
             logger.error(f"Error storing file {file_data.get('file_id')}: {str(e)}")
+            return False
+
+    def find_file_by_hash(self, file_hash: str) -> Optional[Dict]:
+        """Find existing file by hash."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT id, filename, file_type, file_size, storage_path, relative_path,
+                           upload_time, created_at, upload_count
+                    FROM files
+                    WHERE file_hash = ?
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (file_hash,))
+
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "file_id": row[0],
+                        "filename": row[1],
+                        "file_type": row[2],
+                        "file_size": row[3],
+                        "storage_path": row[4],
+                        "relative_path": row[5],
+                        "upload_time": row[6],
+                        "created_at": row[7],
+                        "upload_count": row[8]
+                    }
+                return None
+        except Exception as e:
+            logger.error(f"Error finding file by hash: {str(e)}")
+            return None
+
+    def increment_upload_count(self, file_id: str) -> bool:
+        """Increment upload count for existing file."""
+        try:
+            with self.get_connection() as conn:
+                conn.execute("""
+                    UPDATE files
+                    SET upload_count = upload_count + 1,
+                        upload_time = ?
+                    WHERE id = ?
+                """, (time.time(), file_id))
+                conn.commit()
+                logger.info(f"Incremented upload count for file: {file_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error incrementing upload count: {str(e)}")
             return False
     
     def get_file(self, file_id: str) -> Optional[Dict]:
