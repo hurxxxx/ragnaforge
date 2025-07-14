@@ -46,22 +46,28 @@ async def rerank_documents(
 
         # Convert back to RerankResult format
         reranked_results = []
-        for doc in result.get("documents", []):
+        for i, doc in enumerate(result.get("documents", []), 1):
             rerank_result = RerankResult(
                 id=doc.get("id"),
                 text=doc.get("text"),
-                score=doc.get("score"),
-                rerank_score=doc.get("rerank_score"),
+                score=doc.get("score", doc.get("rerank_score", 0.0)),
+                rerank_score=doc.get("rerank_score", doc.get("score", 0.0)),
+                original_score=doc.get("original_score"),
+                rank_position=i,
                 metadata=doc.get("metadata", {})
             )
             reranked_results.append(rerank_result)
 
         return RerankResponse(
             success=True,
-            documents=reranked_results,
-            total_documents=len(reranked_results),
+            results=reranked_results,
+            query=request.query,
+            total_count=len(documents),
+            reranked_count=len(reranked_results),
             processing_time=result.get("processing_time", 0.0),
-            model_used=result.get("model_used", "unknown")
+            model_info=result.get("model_info", {}),
+            rerank_applied=result.get("rerank_applied", True),
+            from_cache=result.get("from_cache", False)
         )
 
     except HTTPException:

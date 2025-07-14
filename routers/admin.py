@@ -83,7 +83,10 @@ async def get_storage_stats(authorization: str = Depends(verify_api_key)):
     """Get storage usage statistics."""
     try:
         stats = storage_service.get_storage_stats()
-        return StorageStatsResponse(**stats)
+        return StorageStatsResponse(
+            success=True,
+            stats=stats
+        )
     except Exception as e:
         logger.error(f"Error getting storage stats: {str(e)}")
         raise HTTPException(
