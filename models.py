@@ -1,7 +1,7 @@
 """Pydantic models for API request/response validation."""
 
 from typing import List, Optional, Union, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from config import settings
 
@@ -12,30 +12,31 @@ class EmbeddingRequest(BaseModel):
     input: Union[str, List[str]] = Field(
         ...,
         description="Text or list of texts to embed",
-        example=["안녕하세요", "한국어 임베딩 모델입니다"]
+        examples=[["안녕하세요", "한국어 임베딩 모델입니다"]]
     )
     model: Optional[str] = Field(
         None,
         description="Model to use for embedding",
-        example="dragonkue/snowflake-arctic-embed-l-v2.0-ko"
+        examples=["dragonkue/snowflake-arctic-embed-l-v2.0-ko"]
     )
     encoding_format: Optional[str] = Field(
         "float",
         description="Encoding format for embeddings",
-        example="float"
+        examples=["float"]
     )
     dimensions: Optional[int] = Field(
         None,
         description="Number of dimensions for the embedding",
-        example=768
+        examples=[768]
     )
     user: Optional[str] = Field(
         None,
         description="A unique identifier representing your end-user",
-        example="user-123"
+        examples=["user-123"]
     )
 
-    @validator('input')
+    @field_validator('input')
+    @classmethod
     def validate_input(cls, v):
         if isinstance(v, str):
             if len(v) > 8192:
@@ -76,18 +77,19 @@ class SimilarityRequest(BaseModel):
 
     texts: List[str] = Field(
         ...,
-        min_items=2,
-        max_items=32,
+        min_length=2,
+        max_length=32,
         description="List of texts to compare",
-        example=["첫 번째 텍스트", "두 번째 텍스트"]
+        examples=[["첫 번째 텍스트", "두 번째 텍스트"]]
     )
     model: Optional[str] = Field(
         None,
         description="Model to use for similarity calculation",
-        example="nlpai-lab/KURE-v1"
+        examples=["nlpai-lab/KURE-v1"]
     )
 
-    @validator('texts')
+    @field_validator('texts')
+    @classmethod
     def validate_texts(cls, v):
         for text in v:
             if len(text) > 8192:
@@ -135,34 +137,35 @@ class ChunkRequest(BaseModel):
     text: str = Field(
         ...,
         description="Text to be chunked",
-        example="이것은 긴 텍스트입니다. 여러 문장으로 구성되어 있습니다. 청킹 기능을 테스트하기 위한 예제입니다."
+        examples=["이것은 긴 텍스트입니다. 여러 문장으로 구성되어 있습니다. 청킹 기능을 테스트하기 위한 예제입니다."]
     )
     strategy: Optional[str] = Field(
         None,
         description="Chunking strategy (sentence, recursive, token). Uses default from settings if not provided.",
-        example="recursive"
+        examples=["recursive"]
     )
     chunk_size: Optional[int] = Field(
         None,
         ge=50,
         le=8192,
         description="Maximum chunk size in tokens. Uses default from settings if not provided.",
-        example=380
+        examples=[380]
     )
     overlap: Optional[int] = Field(
         None,
         ge=0,
         le=500,
         description="Overlap between chunks in tokens. Uses default from settings if not provided.",
-        example=70
+        examples=[70]
     )
     language: Optional[str] = Field(
         None,
         description="Language for chunking (auto, ko, en). Uses default from settings if not provided.",
-        example="auto"
+        examples=["auto"]
     )
 
-    @validator('strategy')
+    @field_validator('strategy')
+    @classmethod
     def validate_strategy(cls, v):
         if v is not None:
             allowed_strategies = ["sentence", "recursive", "token"]
@@ -170,7 +173,8 @@ class ChunkRequest(BaseModel):
                 raise ValueError(f"Strategy must be one of {allowed_strategies}")
         return v
 
-    @validator('language')
+    @field_validator('language')
+    @classmethod
     def validate_language(cls, v):
         if v is not None:
             allowed_languages = ["auto", "ko", "en"]
@@ -178,10 +182,11 @@ class ChunkRequest(BaseModel):
                 raise ValueError(f"Language must be one of {allowed_languages}")
         return v
 
-    @validator('overlap')
-    def validate_overlap(cls, v, values):
-        if v is not None and 'chunk_size' in values and values['chunk_size'] is not None:
-            if v >= values['chunk_size']:
+    @field_validator('overlap')
+    @classmethod
+    def validate_overlap(cls, v, info):
+        if v is not None and info.data.get('chunk_size') is not None:
+            if v >= info.data['chunk_size']:
                 raise ValueError("Overlap must be less than chunk_size")
         return v
 
@@ -297,23 +302,23 @@ class DocumentProcessRequest(BaseModel):
     conversion_method: Optional[str] = Field(
         "auto",
         description="Conversion method: 'marker', 'docling', or 'auto'",
-        example="auto"
+        examples=["auto"]
     )
     extract_images: bool = Field(False, description="Whether to extract images")
     chunk_strategy: Optional[str] = Field(
         None,
         description="Text chunking strategy",
-        example="recursive"
+        examples=["recursive"]
     )
     chunk_size: Optional[int] = Field(
         None,
         description="Chunk size for text splitting",
-        example=380
+        examples=[380]
     )
     overlap: Optional[int] = Field(
         None,
         description="Overlap size between chunks",
-        example=70
+        examples=[70]
     )
     generate_embeddings: bool = Field(
         True,
@@ -322,7 +327,7 @@ class DocumentProcessRequest(BaseModel):
     embedding_model: Optional[str] = Field(
         None,
         description="Model to use for embeddings",
-        example="dragonkue/snowflake-arctic-embed-l-v2.0-ko"
+        examples=["dragonkue/snowflake-arctic-embed-l-v2.0-ko"]
     )
 
 
@@ -362,17 +367,17 @@ class VectorSearchRequest(BaseModel):
     document_filter: Optional[Dict[str, Any]] = Field(
         None,
         description="Filter by document properties",
-        example={"file_types": ["pdf"], "document_ids": ["doc1", "doc2"]}
+        examples=[{"file_types": ["pdf"], "document_ids": ["doc1", "doc2"]}]
     )
     embedding_model: Optional[str] = Field(
         None,
         description="Model to use for query embedding",
-        example="nlpai-lab/KURE-v1"
+        examples=["nlpai-lab/KURE-v1"]
     )
 
 
-class SearchResult(BaseModel):
-    """Individual search result."""
+class VectorSearchResult(BaseModel):
+    """Individual vector search result."""
 
     id: str = Field(..., description="Chunk ID")
     score: float = Field(..., description="Similarity score")
@@ -391,7 +396,7 @@ class VectorSearchResponse(BaseModel):
     query: str = Field(..., description="Original search query")
     total_results: int = Field(..., description="Number of results found")
     search_time: float = Field(..., description="Time taken for search")
-    results: List[SearchResult] = Field(..., description="Search results")
+    results: List[VectorSearchResult] = Field(..., description="Search results")
     error: Optional[str] = Field(None, description="Error message if search failed")
 
 
@@ -580,11 +585,11 @@ class FileInfoResponse(BaseModel):
 class SearchRequest(BaseModel):
     """Request model for unified search."""
 
-    query: str = Field(..., description="Search query", example="인공지능 기술 문서", min_length=1)
+    query: str = Field(..., description="Search query", examples=["인공지능 기술 문서"], min_length=1)
     search_type: str = Field(
         "hybrid",
         description="Type of search to perform",
-        example="hybrid"
+        examples=["hybrid"]
     )
     limit: int = Field(10, description="Maximum number of results", ge=1, le=1000)
     offset: int = Field(0, description="Number of results to skip", ge=0)
@@ -710,8 +715,8 @@ class RerankRequest(BaseModel):
     documents: List[RerankDocument] = Field(
         ...,
         description="List of documents to rerank",
-        min_items=1,
-        max_items=1000
+        min_length=1,
+        max_length=1000
     )
     top_k: Optional[int] = Field(
         None,
