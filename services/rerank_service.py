@@ -242,7 +242,15 @@ class RerankService:
             self.reranker is not None and
             self.reranker.is_initialized()
         )
-    
+
+    def is_model_loaded(self) -> bool:
+        """Check if rerank model is loaded and ready."""
+        return (
+            self._initialized and
+            self.reranker is not None and
+            self.reranker.is_initialized()
+        )
+
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded rerank model."""
         if self.reranker:
