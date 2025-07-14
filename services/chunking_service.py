@@ -271,6 +271,20 @@ class ChunkingService:
 
         return overlap_words
 
+    def _filter_chunks(self, chunks: List[Chunk], min_tokens: int = 3, min_chars: int = 10) -> List[Chunk]:
+        """Filter out chunks that are too small to be meaningful."""
+        filtered_chunks = []
+        for chunk in chunks:
+            # Skip chunks that are too small
+            if (chunk.token_count >= min_tokens and
+                len(chunk.text.strip()) >= min_chars and
+                chunk.text.strip() not in ['', ' ', '\n', '\t']):
+                filtered_chunks.append(chunk)
+            else:
+                logger.debug(f"Filtered out small chunk: '{chunk.text[:50]}...' (tokens: {chunk.token_count}, chars: {len(chunk.text)})")
+
+        return filtered_chunks
+
     def chunk_text(self, text: str, strategy: str = "sentence", chunk_size: int = 512,
                    overlap: int = 50, language: str = "auto") -> List[Chunk]:
         """Main chunking method."""
@@ -278,13 +292,19 @@ class ChunkingService:
             return []
 
         if strategy == "sentence":
-            return self.chunk_by_sentences(text, chunk_size, overlap, language)
+            chunks = self.chunk_by_sentences(text, chunk_size, overlap, language)
         elif strategy == "recursive":
-            return self.chunk_recursively(text, chunk_size, overlap, language)
+            chunks = self.chunk_recursively(text, chunk_size, overlap, language)
         elif strategy == "token":
-            return self.chunk_by_tokens(text, chunk_size, overlap, language)
+            chunks = self.chunk_by_tokens(text, chunk_size, overlap, language)
         else:
             raise ValueError(f"Unknown chunking strategy: {strategy}")
+
+        # Filter out chunks that are too small
+        filtered_chunks = self._filter_chunks(chunks)
+
+        logger.info(f"Chunking completed: {len(chunks)} -> {len(filtered_chunks)} chunks after filtering")
+        return filtered_chunks
 
 
 # Global chunking service instance

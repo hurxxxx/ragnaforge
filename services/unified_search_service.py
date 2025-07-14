@@ -204,12 +204,29 @@ class UnifiedSearchService:
                 search_limit = max(search_limit, limit * 2)  # Ensure we get enough results
 
             # Search in vector backend
-            results = await self.vector_backend.search_similar(
+            raw_results = await self.vector_backend.search_similar(
                 query_vector=query_vector,
                 limit=search_limit,
                 score_threshold=score_threshold,
                 filters=filters
             )
+
+            # Format vector search results to include content field
+            results = []
+            for result in raw_results:
+                formatted_result = result.copy()
+                # Extract content from metadata.text for vector search results
+                metadata = result.get("metadata", {})
+                content = metadata.get("text", metadata.get("content", ""))
+
+                # Filter out results with very short content (likely corrupted data)
+                if len(content.strip()) < 10:  # Skip results with less than 10 characters
+                    logger.warning(f"Skipping vector result with short content: '{content}' (ID: {result.get('id')})")
+                    continue
+
+                formatted_result["content"] = content
+                formatted_result["search_source"] = "vector"
+                results.append(formatted_result)
 
             # Apply reranking if requested and enabled
             rerank_applied = False
@@ -219,9 +236,15 @@ class UnifiedSearchService:
                     # Convert results to rerank format
                     rerank_docs = []
                     for result in results:
+                        # Extract text content properly
+                        text_content = result.get("content", "")
+                        if not text_content:
+                            metadata = result.get("metadata", {})
+                            text_content = metadata.get("text", metadata.get("content", ""))
+
                         doc = {
                             "id": result.get("id", ""),
-                            "text": result.get("content", result.get("text", "")),
+                            "text": text_content,
                             "score": result.get("score", 0.0),
                             "metadata": result.get("metadata", {})
                         }
@@ -447,9 +470,15 @@ class UnifiedSearchService:
                     # Convert merged results to rerank format
                     rerank_docs = []
                     for result in merged_results:
+                        # Extract text content properly for reranking
+                        text_content = result.get("content", "")
+                        if not text_content:
+                            metadata = result.get("metadata", {})
+                            text_content = metadata.get("text", metadata.get("content", ""))
+
                         doc = {
                             "id": result.get("id", ""),
-                            "text": result.get("content", result.get("text", "")),
+                            "text": text_content,
                             "score": result.get("hybrid_score", result.get("score", 0.0)),
                             "metadata": result.get("metadata", {})
                         }

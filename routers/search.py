@@ -182,9 +182,24 @@ async def unified_hybrid_search(
         search_results = []
         for item in result.get("results", []):
             metadata = item.get("metadata", {})
-            # Extract content from metadata.text (Qdrant stores text content here)
-            # For text search results, content might be in item.content
-            content = metadata.get("text", item.get("content", ""))
+
+            # Extract content properly based on search source
+            # Vector search results: content is in metadata.text (from Qdrant payload)
+            # Text search results: content is in item.content (from MeiliSearch)
+            # Hybrid search: could be either, so check both
+            content = ""
+            if "content" in item and item["content"]:
+                # Text search result or already processed content
+                content = item["content"]
+            elif "text" in metadata and metadata["text"]:
+                # Vector search result from Qdrant payload
+                content = metadata["text"]
+            elif "content" in metadata and metadata["content"]:
+                # Alternative content location
+                content = metadata["content"]
+            else:
+                # Fallback to empty content
+                content = ""
 
             search_result = SearchResult(
                 id=str(item.get("id", "")),
