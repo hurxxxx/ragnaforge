@@ -1,8 +1,4 @@
-"""
-Configuration management for KURE API service.
-
-MIT License - Copyright (c) 2025 hurxxxx
-"""
+"""Configuration management for KURE API service."""
 
 import os
 from typing import List, Optional
