@@ -1,4 +1,8 @@
-"""Pydantic models for API request/response validation."""
+"""
+Pydantic models for API request/response validation.
+
+MIT License - Copyright (c) 2025 hurxxxx
+"""
 
 from typing import List, Optional, Union, Dict, Any
 from pydantic import BaseModel, Field, field_validator

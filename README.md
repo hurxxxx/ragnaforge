@@ -37,7 +37,22 @@ conda create -n ragnaforge python=3.11
 conda activate ragnaforge
 ```
 
-### 2. 의존성 설치
+### 2. 설치 방법
+
+#### 방법 1: PyPI에서 설치 (권장)
+```bash
+# 기본 설치
+pip install ragnaforge
+
+# 모든 기능 포함 설치
+pip install ragnaforge[all]
+
+# 특정 기능만 설치
+pip install ragnaforge[marker]  # Marker 지원
+pip install ragnaforge[docling] # Docling 지원
+```
+
+#### 방법 2: 소스에서 설치
 ```bash
 # 기본 의존성 설치
 pip install -r requirements.txt
@@ -45,6 +60,9 @@ pip install -r requirements.txt
 # 문서 변환을 위한 추가 패키지 (선택사항)
 pip install marker-pdf[full]  # Marker 지원
 pip install docling           # Docling 지원
+
+# 개발 모드로 설치
+pip install -e .
 ```
 
 ### 3. 환경 설정
@@ -221,7 +239,15 @@ cp .env.example .env
 
 ## 📄 라이선스
 
-MIT License
+이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+
+### MIT 라이선스 주요 내용:
+- ✅ **상업적 사용 허용**: 상업적 목적으로 자유롭게 사용 가능
+- ✅ **수정 및 배포 허용**: 소스 코드 수정 및 재배포 가능
+- ✅ **사적 사용 허용**: 개인적 용도로 자유롭게 사용 가능
+- ✅ **특허 사용 허용**: 특허권 행사 제한 없음
+- ⚠️ **라이선스 및 저작권 고지 필수**: 라이선스 텍스트와 저작권 고지 포함 필요
+- ❌ **보증 없음**: 소프트웨어에 대한 어떠한 보증도 제공하지 않음
 
 ---
 
