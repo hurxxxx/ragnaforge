@@ -50,6 +50,85 @@ async def upload_file(
         )
 
 
+@router.post("/upload_and_process", response_model=DocumentProcessResponse)
+async def upload_and_process_document(
+    file: UploadFile = File(...),
+    conversion_method: str = "auto",
+    extract_images: bool = False,
+    chunk_strategy: Optional[str] = None,
+    chunk_size: Optional[int] = None,
+    overlap: Optional[int] = None,
+    generate_embeddings: bool = True,
+    embedding_model: Optional[str] = None,
+    authorization: str = Depends(verify_api_key)
+):
+    """Upload a file and process it through the full pipeline in one request.
+
+    This endpoint combines file upload and document processing into a single API call:
+    1. Upload and validate the file
+    2. Convert document to markdown (using marker or docling)
+    3. Split text into chunks
+    4. Generate embeddings
+    5. Store in vector and text search databases
+
+    Returns the complete processing results including file info, chunks, and storage status.
+    """
+    try:
+        # Step 1: Upload file
+        logger.info(f"📤 Starting upload and process for file: {file.filename}")
+        upload_result = await file_upload_service.upload_file(file)
+
+        # Check if upload failed
+        if not upload_result.get("success", True):
+            error_msg = upload_result.get("error", "Upload failed")
+            if "Empty files are not allowed" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error_msg
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=error_msg
+            )
+
+        file_id = upload_result.get("file_id")
+        logger.info(f"✅ File uploaded successfully: {file_id}")
+
+        # Step 2: Process document through full pipeline
+        logger.info(f"🔄 Starting document processing for file: {file_id}")
+        result = await document_processing_service.process_document(
+            file_id=file_id,
+            conversion_method=conversion_method,
+            extract_images=extract_images,
+            chunk_strategy=chunk_strategy,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            generate_embeddings=generate_embeddings,
+            embedding_model=embedding_model
+        )
+
+        # Add upload info to result
+        result["upload_info"] = {
+            "file_id": file_id,
+            "filename": upload_result.get("filename"),
+            "file_size": upload_result.get("file_size"),
+            "upload_time": upload_result.get("upload_time"),
+            "storage_path": upload_result.get("storage_path")
+        }
+
+        logger.info(f"🎉 Upload and process completed successfully for: {file.filename}")
+        return DocumentProcessResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in upload and process: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Upload and process failed: {str(e)}"
+        )
+
+
 @router.post("/process", response_model=DocumentProcessResponse)
 async def process_document(
     request: DocumentProcessRequest,

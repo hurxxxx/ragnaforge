@@ -25,12 +25,10 @@ class DocumentProcessingService:
         """Choose the best conversion method for the file type."""
         if method in ["marker", "docling"]:
             return method
-        
-        # Auto selection logic
-        if file_type == SupportedFileType.PDF:
-            return "docling"  # Docling is generally faster for PDFs
-        elif file_type in [SupportedFileType.DOCX, SupportedFileType.PPTX]:
-            return "docling"  # Docling supports these formats
+
+        # Auto selection logic - marker is now the default for all supported formats
+        if file_type in [SupportedFileType.PDF, SupportedFileType.DOCX, SupportedFileType.PPTX]:
+            return "marker"  # Marker supports PDF, DOCX, PPTX, XLSX, HTML, EPUB
         else:
             return "marker"  # Fallback to marker
     
@@ -101,26 +99,36 @@ class DocumentProcessingService:
                     }
             
             elif file_type in [SupportedFileType.DOCX, SupportedFileType.PPTX]:
-                # Use docling for Office documents
-                result = docling_service.convert_pdf_to_markdown(
-                    pdf_path=str(file_path),
-                    output_dir="temp_processing",
-                    extract_images=extract_images
-                )
-                
+                # Use marker or docling for Office documents based on method
+                logger.info(f"📄 Office 문서 변환 시작 - 방법: {method}")
+                if method == "marker":
+                    logger.info(f"🔄 Marker 서비스로 Office 문서 변환 중...")
+                    result = marker_service.convert_pdf_to_markdown(
+                        pdf_path=str(file_path),
+                        output_dir="temp_processing",
+                        extract_images=extract_images
+                    )
+                else:  # docling
+                    logger.info(f"🔄 Docling 서비스로 Office 문서 변환 중...")
+                    result = docling_service.convert_pdf_to_markdown(
+                        pdf_path=str(file_path),
+                        output_dir="temp_processing",
+                        extract_images=extract_images
+                    )
+
                 if result.get("success"):
                     return {
                         "success": True,
                         "markdown_content": result.get("markdown", ""),
                         "markdown_length": result.get("markdown_length", 0),
                         "conversion_time": result.get("conversion_time", 0),
-                        "method_used": "docling"
+                        "method_used": method
                     }
                 else:
                     return {
                         "success": False,
                         "error": result.get("error", "Conversion failed"),
-                        "method_used": "docling"
+                        "method_used": method
                     }
             
             else:
