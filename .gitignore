@@ -23,6 +23,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 sample_docs
+temp_processing
 
 # PyInstaller
 *.manifest

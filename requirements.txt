@@ -1,14 +1,20 @@
-fastapi==0.115.12
+fastapi==0.116.1
 uvicorn[standard]==0.34.2
-sentence-transformers==4.1.0
-pydantic==2.11.5
-pydantic-settings==2.9.1
+sentence-transformers==5.0.0
+pydantic==2.11.7
+pydantic-settings==2.10.1
 python-multipart==0.0.20
 numpy==2.2.6
-torch==2.7.0
+torch==2.7.1
 transformers==4.52.4
 httpx==0.28.1
 python-dotenv==1.1.0
+
+# Vector database dependencies
+qdrant-client==1.14.3
+
+# Text search dependencies
+meilisearch==0.33.0
 
 # Text chunking dependencies
 kss==6.0.4
@@ -28,3 +34,11 @@ pytest==8.3.5
 pytest-asyncio==1.0.0
 black==25.1.0
 flake8==7.2.0
+
+
+# Streamlit UI Requirements
+streamlit>=1.28.0
+requests>=2.31.0
+pandas>=2.0.0
+plotly>=5.15.0
+python-dateutil>=2.8.2
