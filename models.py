@@ -362,8 +362,8 @@ class VectorSearchRequest(BaseModel):
     """Request for vector similarity search."""
 
     query: str = Field(..., description="Search query text", min_length=1)
-    limit: int = Field(10, description="Maximum number of results", ge=1, le=1000)
-    score_threshold: float = Field(0.0, description="Minimum similarity score", ge=0.0, le=1.0)
+    limit: int = Field(default_factory=lambda: settings.default_search_limit, description="Maximum number of results", ge=1, le=1000)
+    score_threshold: float = Field(default_factory=lambda: settings.default_score_threshold, description="Minimum similarity score", ge=0.0, le=1.0)
     document_filter: Optional[Dict[str, Any]] = Field(
         None,
         description="Filter by document properties",
@@ -591,9 +591,9 @@ class SearchRequest(BaseModel):
         description="Type of search to perform",
         examples=["hybrid"]
     )
-    limit: int = Field(10, description="Maximum number of results", ge=1, le=1000)
+    limit: int = Field(default_factory=lambda: settings.default_search_limit, description="Maximum number of results", ge=1, le=1000)
     offset: int = Field(0, description="Number of results to skip", ge=0)
-    score_threshold: float = Field(0.0, description="Minimum similarity score", ge=0.0, le=1.0)
+    score_threshold: float = Field(default_factory=lambda: settings.default_score_threshold, description="Minimum similarity score", ge=0.0, le=1.0)
     filters: Optional[Dict[str, Any]] = Field(None, description="Search filters")
     embedding_model: Optional[str] = Field(None, description="Embedding model to use")
     highlight: bool = Field(False, description="Whether to highlight search terms")
@@ -622,8 +622,8 @@ class SearchRequest(BaseModel):
 class HybridSearchRequest(SearchRequest):
     """Request model for hybrid search with additional configuration."""
 
-    vector_weight: float = Field(0.6, description="Weight for vector search results", ge=0.0, le=1.0)
-    text_weight: float = Field(0.4, description="Weight for text search results", ge=0.0, le=1.0)
+    vector_weight: float = Field(default_factory=lambda: settings.default_vector_weight, description="Weight for vector search results", ge=0.0, le=1.0)
+    text_weight: float = Field(default_factory=lambda: settings.default_text_weight, description="Weight for text search results", ge=0.0, le=1.0)
 
     model_config = {
         "json_schema_extra": {

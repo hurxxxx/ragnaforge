@@ -271,17 +271,25 @@ class ChunkingService:
 
         return overlap_words
 
-    def _filter_chunks(self, chunks: List[Chunk], min_tokens: int = 3, min_chars: int = 10) -> List[Chunk]:
+    def _filter_chunks(self, chunks: List[Chunk], min_tokens: int = 15, min_chars: int = 50) -> List[Chunk]:
         """Filter out chunks that are too small to be meaningful."""
         filtered_chunks = []
         for chunk in chunks:
-            # Skip chunks that are too small
+            # Skip chunks that are too small or are just headers/titles
+            chunk_text = chunk.text.strip()
+
+            # Check if it's just a markdown header (starts with # and is very short)
+            is_just_header = (chunk_text.startswith('#') and
+                            len(chunk_text.split('\n')) == 1 and
+                            len(chunk_text) < 100)
+
             if (chunk.token_count >= min_tokens and
-                len(chunk.text.strip()) >= min_chars and
-                chunk.text.strip() not in ['', ' ', '\n', '\t']):
+                len(chunk_text) >= min_chars and
+                not is_just_header and
+                chunk_text not in ['', ' ', '\n', '\t']):
                 filtered_chunks.append(chunk)
             else:
-                logger.debug(f"Filtered out small chunk: '{chunk.text[:50]}...' (tokens: {chunk.token_count}, chars: {len(chunk.text)})")
+                logger.debug(f"Filtered out small/header chunk: '{chunk.text[:50]}...' (tokens: {chunk.token_count}, chars: {len(chunk.text)})")
 
         return filtered_chunks
 

@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Any
 import plotly.express as px
 import plotly.graph_objects as go
+from config import settings
 
 # 페이지 설정
 st.set_page_config(
@@ -346,19 +347,20 @@ with tab2:
         col_adv1, col_adv2, col_adv3 = st.columns(3)
         
         with col_adv1:
-            limit = st.number_input("결과 수", min_value=1, max_value=50, value=10)
-            score_threshold = st.number_input("점수 임계값", min_value=0.0, max_value=1.0, value=0.3, step=0.1)
+            limit = st.number_input("결과 수", min_value=1, max_value=200, value=settings.default_search_limit)
+            score_threshold = st.number_input("점수 임계값", min_value=0.0, max_value=1.0, value=settings.default_score_threshold, step=0.1)
         
         with col_adv2:
             if search_type == "hybrid":
-                vector_weight = st.slider("벡터 가중치", 0.0, 1.0, 0.7)
+                vector_weight = st.slider("벡터 가중치", 0.0, 1.0, settings.default_vector_weight)
                 text_weight = 1.0 - vector_weight
                 st.write(f"텍스트 가중치: {text_weight:.1f}")
         
         with col_adv3:
             rerank = st.checkbox("리랭킹 적용", value=True, key="search_rerank")
             if rerank:
-                rerank_top_k = st.number_input("리랭크 대상 수", min_value=5, max_value=100, value=20)
+                rerank_top_k = st.number_input("리랭크 대상 수", min_value=50, max_value=500, value=settings.rerank_top_k)
+                rerank_final_k = st.number_input("최종 결과 수", min_value=10, max_value=200, value=settings.rerank_final_k)
     
     # 검색 실행
     if st.button("🔍 검색 실행", use_container_width=True) and query:
@@ -376,7 +378,8 @@ with tab2:
                 if rerank:
                     search_data.update({
                         "rerank": True,
-                        "rerank_top_k": rerank_top_k
+                        "rerank_top_k": rerank_top_k,
+                        "rerank_final_k": rerank_final_k
                     })
             elif search_type == "text":
                 search_data["highlight"] = True
@@ -389,7 +392,8 @@ with tab2:
                 if rerank:
                     search_data.update({
                         "rerank": True,
-                        "rerank_top_k": rerank_top_k
+                        "rerank_top_k": rerank_top_k,
+                        "rerank_final_k": rerank_final_k
                     })
             
             search_result = make_api_request(f"/v1/search/{search_type}", "POST", search_data)
@@ -483,7 +487,7 @@ with tab4:
         with col_chat1:
             use_search = st.checkbox("문서 검색 기반 답변", value=True, key="chat_use_search")
             if use_search:
-                search_limit = st.number_input("검색 결과 수", min_value=1, max_value=10, value=5)
+                search_limit = st.number_input("검색 결과 수", min_value=1, max_value=20, value=min(10, settings.default_search_limit))
                 use_rerank = st.checkbox("리랭킹 적용", value=True, key="chat_rerank")
 
         with col_chat2:
@@ -532,8 +536,8 @@ with tab4:
                     search_data = {
                         "query": user_input,
                         "limit": search_limit,
-                        "vector_weight": 0.7,
-                        "text_weight": 0.3,
+                        "vector_weight": settings.default_vector_weight,
+                        "text_weight": settings.default_text_weight,
                         "embedding_model": "nlpai-lab/KURE-v1"
                     }
 

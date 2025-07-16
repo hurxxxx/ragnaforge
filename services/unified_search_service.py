@@ -201,7 +201,7 @@ class UnifiedSearchService:
             search_limit = limit
             if rerank and rerank_service.is_enabled():
                 search_limit = rerank_top_k or getattr(settings, 'rerank_top_k', 100)
-                search_limit = max(search_limit, limit * 2)  # Ensure we get enough results
+                search_limit = max(search_limit, limit * settings.search_expansion_factor)  # Ensure we get enough results
 
             # Search in vector backend
             raw_results = await self.vector_backend.search_similar(
@@ -252,10 +252,11 @@ class UnifiedSearchService:
 
                     # Perform reranking
                     logger.info(f"🔄 Rerank 시작: {len(rerank_docs)}개 문서")
+                    final_k = getattr(settings, 'rerank_final_k', limit)
                     rerank_result = await rerank_service.rerank_documents(
                         query=query,
                         documents=rerank_docs,
-                        top_k=limit,
+                        top_k=final_k,
                         use_cache=True
                     )
                     logger.info(f"✅ Rerank 완료: {rerank_result.get('processing_time', 0):.3f}초")
@@ -417,7 +418,7 @@ class UnifiedSearchService:
             # Perform both searches concurrently
             vector_task = self.vector_search(
                 query=query,
-                limit=limit * 2,  # Get more results for better fusion
+                limit=limit * settings.search_expansion_factor,  # Get more results for better fusion
                 score_threshold=score_threshold,
                 filters=filters,
                 embedding_model=embedding_model
@@ -425,7 +426,7 @@ class UnifiedSearchService:
 
             text_task = self.text_search(
                 query=query,
-                limit=limit * 2,  # Get more results for better fusion
+                limit=limit * settings.search_expansion_factor,  # Get more results for better fusion
                 filters=filters,
                 highlight=highlight
             )
@@ -451,7 +452,7 @@ class UnifiedSearchService:
             merge_limit = limit
             if rerank and rerank_service.is_enabled():
                 merge_limit = rerank_top_k or getattr(settings, 'rerank_top_k', 100)
-                merge_limit = max(merge_limit, limit * 2)  # Ensure we get enough results
+                merge_limit = max(merge_limit, limit * settings.search_expansion_factor)  # Ensure we get enough results
 
             # Merge and rank results
             merged_results = self._merge_search_results(
@@ -490,10 +491,11 @@ class UnifiedSearchService:
                         rerank_docs.append(doc)
 
                     # Perform reranking
+                    final_k = getattr(settings, 'rerank_final_k', limit)
                     rerank_result = await rerank_service.rerank_documents(
                         query=query,
                         documents=rerank_docs,
-                        top_k=limit,
+                        top_k=final_k,
                         use_cache=True
                     )
 

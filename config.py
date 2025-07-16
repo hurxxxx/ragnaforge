@@ -40,11 +40,18 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
-    # Text Chunking Defaults
+    # Text Chunking Defaults (Research-based optimization for business documents)
     default_chunk_strategy: str = "recursive"
-    default_chunk_size: int = 380
-    default_chunk_overlap: int = 70
+    default_chunk_size: int = 768  # Optimal range: 512-1024 tokens (research-backed)
+    default_chunk_overlap: int = 100  # ~13% overlap for better context continuity
     default_chunk_language: str = "auto"
+
+    # Search Defaults (Optimized for hybrid search + rerank workflow)
+    default_search_limit: int = 100  # Default number of search results (hybrid search)
+    default_score_threshold: float = 0.0  # Default minimum similarity score
+    default_vector_weight: float = 0.7  # Default vector weight for hybrid search
+    default_text_weight: float = 0.3  # Default text weight for hybrid search
+    search_expansion_factor: int = 3  # Multiplier for initial search when using fusion/rerank
 
     # OpenAI API Configuration
     openai_api_key: Optional[str] = None
@@ -90,15 +97,16 @@ class Settings(BaseSettings):
     temp_dir: str = "temp"
     max_file_size_mb: int = 50
 
-    # Rerank Configuration
+    # Rerank Configuration (Optimized for 100→50 workflow)
     rerank_enabled: bool = True
     rerank_model: str = "dragonkue/bge-reranker-v2-m3-ko"
     rerank_model_type: str = "bge_m3_ko"
-    rerank_top_k: int = 100  # Number of documents to rerank from initial search
-    rerank_batch_size: int = 32
+    rerank_top_k: int = 300  # Number of documents to rerank from initial search (3x for quality)
+    rerank_final_k: int = 50  # Number of final results to return after reranking
+    rerank_batch_size: int = 64  # Increased batch size for better throughput
     rerank_device: Optional[str] = None  # Auto-detect if None
     rerank_cache_enabled: bool = True
-    rerank_cache_size: int = 1000  # Number of cached rerank results
+    rerank_cache_size: int = 2000  # Increased cache size for better performance
 
     model_config = {
         "env_file": ".env",
