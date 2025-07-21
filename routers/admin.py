@@ -18,6 +18,8 @@ from services.database_service import database_service
 from services.qdrant_service import qdrant_service
 from services.storage_service import storage_service
 from services.rerank_service import rerank_service
+from config import settings
+from services.unified_search_service import unified_search_service
 from routers.auth import verify_api_key
 
 logger = logging.getLogger(__name__)
@@ -264,4 +266,154 @@ async def chunk_text(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Text chunking failed: {str(e)}"
+        )
+
+
+# Collection Management endpoints
+@router.get("/admin/collections/status")
+async def get_collections_status(authorization: str = Depends(verify_api_key)):
+    """Get status of all collections (Qdrant and MeiliSearch)."""
+    try:
+        # Get Qdrant status
+        qdrant_health = qdrant_service.health_check()
+        qdrant_stats = qdrant_service.get_collection_stats()
+
+        # Get MeiliSearch status
+        meilisearch_health = {"status": "unknown", "backend": "meilisearch"}
+        meilisearch_stats = {}
+
+        try:
+            # Try to get MeiliSearch backend directly
+            if hasattr(unified_search_service, 'text_backend') and unified_search_service.text_backend:
+                text_backend = unified_search_service.text_backend
+                meilisearch_health = await text_backend.health_check()
+                meilisearch_stats = text_backend.get_stats()
+        except Exception as e:
+            logger.warning(f"Could not get MeiliSearch status: {e}")
+            meilisearch_health = {"status": "unknown", "error": str(e)}
+
+        return {
+            "success": True,
+            "qdrant": {
+                "health": qdrant_health,
+                "stats": qdrant_stats
+            },
+            "meilisearch": {
+                "health": meilisearch_health,
+                "stats": meilisearch_stats
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting collections status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get collections status: {str(e)}"
+        )
+
+
+@router.post("/admin/collections/qdrant/reset")
+async def reset_qdrant_collection(authorization: str = Depends(verify_api_key)):
+    """Reset Qdrant collection (delete and recreate)."""
+    try:
+        # Get current stats before reset
+        old_stats = qdrant_service.get_collection_stats()
+        old_points = old_stats.get('points_count', 0)
+
+        # Check if client is available
+        if not qdrant_service.client:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Qdrant client not available"
+            )
+
+        from qdrant_client.models import VectorParams, Distance
+
+        # Delete existing collection if it exists
+        try:
+            collections = qdrant_service.client.get_collections()
+            collection_names = [col.name for col in collections.collections]
+
+            if qdrant_service.collection_name in collection_names:
+                logger.info(f"Deleting existing collection: {qdrant_service.collection_name}")
+                qdrant_service.client.delete_collection(qdrant_service.collection_name)
+                logger.info(f"Collection '{qdrant_service.collection_name}' deleted successfully")
+        except Exception as e:
+            logger.warning(f"Error deleting collection: {e}")
+
+        # Recreate collection
+        logger.info(f"Creating new collection: {qdrant_service.collection_name}")
+        qdrant_service.client.create_collection(
+            collection_name=qdrant_service.collection_name,
+            vectors_config=VectorParams(
+                size=settings.vector_dimension,  # 환경변수에서 설정된 벡터 차원
+                distance=Distance.COSINE
+            )
+        )
+
+        logger.info(f"Collection '{qdrant_service.collection_name}' reset successfully")
+
+        return {
+            "success": True,
+            "message": f"Qdrant collection '{qdrant_service.collection_name}' reset successfully",
+            "collection_name": qdrant_service.collection_name,
+            "points_deleted": old_points
+        }
+
+    except Exception as e:
+        logger.error(f"Error resetting Qdrant collection: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset Qdrant collection: {str(e)}"
+        )
+
+
+@router.post("/admin/collections/meilisearch/reset")
+async def reset_meilisearch_index(authorization: str = Depends(verify_api_key)):
+    """Reset MeiliSearch index (delete and recreate)."""
+    try:
+        # Get unified search service
+        text_backend = unified_search_service.text_backend
+
+        if not text_backend:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="MeiliSearch backend not available"
+            )
+
+        # Get current stats
+        old_stats = text_backend.get_stats()
+        old_docs = old_stats.get('documents_count', 0)
+
+        # Get index name safely
+        index_name = getattr(text_backend, 'index_name', 'ragnaforge_documents')
+
+        # Delete existing index
+        try:
+            await text_backend.delete_index(index_name)
+            logger.info(f"Deleted MeiliSearch index: {index_name}")
+        except Exception as e:
+            logger.warning(f"Error deleting index: {e}")
+
+        # Recreate index
+        await text_backend.create_index(index_name)
+
+        # Configure Korean settings if method exists
+        if hasattr(text_backend, '_configure_korean_settings'):
+            await text_backend._configure_korean_settings()
+
+        logger.info(f"MeiliSearch index '{index_name}' reset successfully")
+
+        return {
+            "success": True,
+            "message": f"MeiliSearch index '{index_name}' reset successfully",
+            "index_name": index_name,
+            "documents_deleted": old_docs
+        }
+
+    except Exception as e:
+        logger.error(f"Error resetting MeiliSearch index: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset MeiliSearch index: {str(e)}"
         )

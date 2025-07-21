@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     cache_dir: Optional[str] = None
     max_sequence_length: int = 512
 
+    # Vector Configuration
+    vector_dimension: int = 1024  # Default for KURE-v1
+
     # API Limits
     max_batch_size: int = 150
     optimal_batch_size: int = 128
@@ -41,7 +44,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Text Chunking Defaults (Research-based optimization for business documents)
-    default_chunk_strategy: str = "recursive"
+    default_chunk_strategy: str = "semantic"
     default_chunk_size: int = 768  # Optimal range: 512-1024 tokens (research-backed)
     default_chunk_overlap: int = 100  # ~13% overlap for better context continuity
     default_chunk_language: str = "auto"

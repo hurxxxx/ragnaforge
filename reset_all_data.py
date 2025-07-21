@@ -31,7 +31,10 @@ class DataResetManager:
         self.qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
         self.qdrant_api_key = os.getenv("QDRANT_API_KEY")
         self.qdrant_collection = "ragnaforge_documents"
-        
+
+        # Vector 설정
+        self.vector_dimension = int(os.getenv("VECTOR_DIMENSION", "1024"))
+
         # MeiliSearch 설정
         self.meilisearch_url = os.getenv("MEILISEARCH_URL", "http://localhost:7700")
         self.meilisearch_api_key = os.getenv("MEILISEARCH_API_KEY")
@@ -84,10 +87,11 @@ class DataResetManager:
             
             # 새 컬렉션 생성
             logger.info(f"📦 새 컬렉션 '{self.qdrant_collection}' 생성 중...")
+            logger.info(f"벡터 차원: {self.vector_dimension}")
             client.create_collection(
                 collection_name=self.qdrant_collection,
                 vectors_config=VectorParams(
-                    size=768,  # KURE-v1 모델의 벡터 차원
+                    size=self.vector_dimension,  # 환경변수에서 설정된 벡터 차원
                     distance=Distance.COSINE
                 )
             )

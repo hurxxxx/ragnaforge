@@ -66,7 +66,7 @@ class QdrantService:
                 self.client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
-                        size=1024,  # KURE-v1 embedding dimension
+                        size=settings.vector_dimension,  # 환경변수에서 설정된 벡터 차원
                         distance=Distance.COSINE
                     )
                 )

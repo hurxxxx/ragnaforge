@@ -191,6 +191,158 @@ class ChunkingService:
 
         return _split_text(text, separators)
 
+    def chunk_semantic_recursive(self, text: str, chunk_size: int, overlap: int, language: str = "auto") -> List[Chunk]:
+        """Chunk text with semantic awareness - improved paragraph and section detection."""
+        import re
+
+        # 1. 먼저 마크다운 구조 기반으로 섹션 분리
+        sections = self._split_by_markdown_structure(text)
+
+        all_chunks = []
+        current_pos = 0
+
+        for section in sections:
+            if not section.strip():
+                current_pos += len(section)
+                continue
+
+            # 2. 각 섹션 내에서 의미 기반 분리
+            section_chunks = self._chunk_section_semantically(section, chunk_size, overlap, current_pos)
+            all_chunks.extend(section_chunks)
+            current_pos += len(section)
+
+        return all_chunks
+
+    def _split_by_markdown_structure(self, text: str) -> List[str]:
+        """Split text by markdown structure (headers, lists, code blocks)."""
+        import re
+
+        # 마크다운 구조 패턴들
+        patterns = [
+            r'^#{1,6}\s+.+$',  # 헤더 (# ## ### 등)
+            r'^[-*+]\s+.+$',   # 리스트 항목
+            r'^[0-9]+\.\s+.+$', # 번호 리스트
+            r'^```[\s\S]*?```$', # 코드 블록
+            r'^>\s+.+$',       # 인용문
+            r'^---+$',         # 구분선
+        ]
+
+        # 문단 분리 (빈 줄 기준)
+        paragraphs = re.split(r'\n\s*\n', text)
+
+        sections = []
+        current_section = ""
+
+        for paragraph in paragraphs:
+            paragraph = paragraph.strip()
+            if not paragraph:
+                continue
+
+            # 마크다운 구조 요소인지 확인
+            is_structure = any(re.match(pattern, paragraph, re.MULTILINE) for pattern in patterns)
+
+            # 헤더로 시작하는 경우 새 섹션 시작
+            if re.match(r'^#{1,6}\s+', paragraph):
+                if current_section:
+                    sections.append(current_section)
+                current_section = paragraph + "\n\n"
+            else:
+                current_section += paragraph + "\n\n"
+
+        if current_section:
+            sections.append(current_section)
+
+        return sections if sections else [text]
+
+    def _chunk_section_semantically(self, section: str, chunk_size: int, overlap: int, start_pos: int) -> List[Chunk]:
+        """Chunk a section with semantic awareness."""
+        import re
+
+        # 문장 단위로 분리 (한국어 고려)
+        sentences = self._split_sentences_advanced(section)
+
+        chunks = []
+        current_chunk = ""
+        current_start = start_pos
+        sentence_start = start_pos
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                sentence_start += len(sentence) + 1
+                continue
+
+            # 현재 청크에 문장을 추가했을 때의 토큰 수 계산
+            test_chunk = current_chunk + (" " if current_chunk else "") + sentence
+            test_tokens = self.estimate_tokens(test_chunk)
+
+            if test_tokens <= chunk_size:
+                # 청크에 추가
+                if current_chunk:
+                    current_chunk += " " + sentence
+                else:
+                    current_chunk = sentence
+                    current_start = sentence_start
+            else:
+                # 현재 청크 완성
+                if current_chunk:
+                    chunks.append(Chunk(
+                        text=current_chunk,
+                        start_char=current_start,
+                        end_char=current_start + len(current_chunk),
+                        token_count=self.estimate_tokens(current_chunk)
+                    ))
+
+                # 새 청크 시작
+                current_chunk = sentence
+                current_start = sentence_start
+
+            sentence_start += len(sentence) + 1
+
+        # 마지막 청크 추가
+        if current_chunk:
+            chunks.append(Chunk(
+                text=current_chunk,
+                start_char=current_start,
+                end_char=current_start + len(current_chunk),
+                token_count=self.estimate_tokens(current_chunk)
+            ))
+
+        return chunks
+
+    def _split_sentences_advanced(self, text: str) -> List[str]:
+        """Advanced sentence splitting with Korean support."""
+        import re
+
+        # 한국어와 영어 문장 분리 패턴
+        patterns = [
+            r'[.!?]+\s+(?=[A-Z가-힣])',  # 영어/한국어 문장 끝
+            r'[.!?]+\n',                 # 줄바꿈이 있는 문장 끝
+            r'[。！？]+\s*',              # 한국어 문장부호
+            r'\n\s*\n',                  # 문단 분리
+        ]
+
+        sentences = [text]
+
+        for pattern in patterns:
+            new_sentences = []
+            for sentence in sentences:
+                splits = re.split(f'({pattern})', sentence)
+                current = ""
+                for i, split in enumerate(splits):
+                    if re.match(pattern, split):
+                        current += split
+                        if current.strip():
+                            new_sentences.append(current.strip())
+                        current = ""
+                    else:
+                        current += split
+                if current.strip():
+                    new_sentences.append(current.strip())
+            sentences = new_sentences
+
+        return [s for s in sentences if s.strip()]
+
     def chunk_by_tokens(self, text: str, chunk_size: int, overlap: int, language: str = "auto") -> List[Chunk]:
         """Chunk text by token count."""
         # Simple implementation: split by words and group by token count
@@ -303,6 +455,8 @@ class ChunkingService:
             chunks = self.chunk_by_sentences(text, chunk_size, overlap, language)
         elif strategy == "recursive":
             chunks = self.chunk_recursively(text, chunk_size, overlap, language)
+        elif strategy == "semantic":
+            chunks = self.chunk_semantic_recursive(text, chunk_size, overlap, language)
         elif strategy == "token":
             chunks = self.chunk_by_tokens(text, chunk_size, overlap, language)
         else:

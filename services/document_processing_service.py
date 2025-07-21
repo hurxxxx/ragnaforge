@@ -175,17 +175,24 @@ class DocumentProcessingService:
     def _generate_embeddings(self, chunks: List[Dict], model: str) -> bool:
         """Generate embeddings for text chunks."""
         try:
+            logger.info(f"🔢 임베딩 생성 시작: {len(chunks)}개 청크, 모델={model}")
             texts = [chunk["text"] for chunk in chunks]
+            logger.info(f"📝 텍스트 추출 완료: 평균 길이={sum(len(t) for t in texts) / len(texts):.1f}자")
+
             embeddings = embedding_service.encode_texts(texts, model)
-            
+            logger.info(f"🧠 임베딩 인코딩 완료: shape={embeddings.shape}")
+
             # Add embeddings to chunks
             for i, chunk in enumerate(chunks):
                 chunk["embedding"] = embeddings[i].tolist()
-            
+
+            logger.info(f"✅ 임베딩 생성 성공: {len(chunks)}개 청크 처리 완료")
             return True
-            
+
         except Exception as e:
-            logger.error(f"Error generating embeddings: {str(e)}")
+            logger.error(f"❌ 임베딩 생성 실패: {str(e)}")
+            import traceback
+            logger.error(f"상세 오류: {traceback.format_exc()}")
             return False
     
     async def process_document(self, file_id: str, conversion_method: str = "auto",
