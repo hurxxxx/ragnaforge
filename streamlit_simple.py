@@ -192,6 +192,22 @@ with tab2:
         with col2:
             chunk_size = st.number_input("청크 크기", min_value=100, max_value=2048, value=768)
             generate_embeddings = st.checkbox("임베딩 생성", value=True)
+
+        # 고급 옵션
+        with st.expander("🔧 고급 옵션"):
+            col_adv1, col_adv2 = st.columns(2)
+
+            with col_adv1:
+                enable_hash_check = st.selectbox(
+                    "해시 중복 검사",
+                    options=["시스템 기본값", "활성화", "비활성화"],
+                    index=0,
+                    help="파일 해시를 사용한 중복 검사 설정"
+                )
+
+            with col_adv2:
+                st.write("**현재 시스템 기본값:**")
+                st.info("비활성화 (ENABLE_HASH_DUPLICATE_CHECK=false)")
         
         if st.button("📤 업로드 및 처리", use_container_width=True):
             # 파일 업로드
@@ -205,12 +221,21 @@ with tab2:
                 
                 # 문서 처리
                 with st.spinner("문서 처리 중..."):
+                    # 해시 체크 설정 변환
+                    hash_check_value = None
+                    if enable_hash_check == "활성화":
+                        hash_check_value = True
+                    elif enable_hash_check == "비활성화":
+                        hash_check_value = False
+                    # "시스템 기본값"인 경우 None으로 유지
+
                     process_data = {
                         "file_id": file_id,
                         "conversion_method": conversion_method,
                         "chunk_strategy": chunk_strategy,
                         "chunk_size": chunk_size,
-                        "generate_embeddings": generate_embeddings
+                        "generate_embeddings": generate_embeddings,
+                        "enable_hash_check": hash_check_value
                     }
                     
                     process_result = make_api_request("/v1/process", "POST", process_data)
@@ -360,12 +385,22 @@ with tab5:
                         reset_result = make_api_request("/v1/admin/collections/qdrant/reset", "POST")
 
                         if reset_result["success"]:
-                            st.success(f"✅ {reset_result['data']['message']}")
-                            st.info(f"삭제된 포인트: {reset_result['data']['points_deleted']:,}개")
+                            # API 응답 데이터 가져오기
+                            response_data = reset_result.get("data", {})
+                            st.success(f"✅ {response_data.get('message', 'Qdrant 컬렉션 초기화 완료')}")
+                            st.info(f"삭제된 포인트: {response_data.get('points_deleted', 0):,}개")
                             # 상태 새로고침
-                            del st.session_state.collections_status
+                            if 'collections_status' in st.session_state:
+                                del st.session_state.collections_status
+                            # 페이지 새로고침으로 상태 업데이트
+                            st.rerun()
                         else:
-                            st.error(f"❌ 초기화 실패: {reset_result.get('error', 'Unknown error')}")
+                            error_msg = reset_result.get('error', 'Unknown error')
+                            status_code = reset_result.get('status_code', 'Unknown')
+                            st.error(f"❌ Qdrant 초기화 실패 (HTTP {status_code}): {error_msg}")
+                            # 디버깅을 위한 상세 정보
+                            with st.expander("상세 오류 정보"):
+                                st.json(reset_result)
 
                     st.session_state.confirm_qdrant_reset = False
                 else:
@@ -373,6 +408,32 @@ with tab5:
                     if st.button("확인", key="confirm_qdrant"):
                         st.session_state.confirm_qdrant_reset = True
                         st.rerun()
+
+        st.divider()
+
+        # 시스템 설정 정보
+        if 'system_settings' in status_data:
+            st.subheader("⚙️ 시스템 설정")
+            system_settings = status_data['system_settings']
+
+            col_s1, col_s2 = st.columns(2)
+
+            with col_s1:
+                st.write("**파일 처리 설정:**")
+                hash_check_enabled = system_settings.get('hash_duplicate_check_enabled', False)
+                if hash_check_enabled:
+                    st.success("✅ 해시 중복 검사: 활성화")
+                else:
+                    st.info("ℹ️ 해시 중복 검사: 비활성화")
+
+                st.write(f"- 최대 파일 크기: {system_settings.get('max_file_size_mb', 50)}MB")
+
+            with col_s2:
+                st.write("**저장소 설정:**")
+                st.write(f"- 저장 경로: {system_settings.get('storage_base_path', './data/storage')}")
+
+                if not hash_check_enabled:
+                    st.warning("⚠️ 해시 중복 검사가 비활성화되어 있어 동일한 파일도 중복 업로드됩니다.")
 
         st.divider()
 
@@ -406,12 +467,22 @@ with tab5:
                         reset_result = make_api_request("/v1/admin/collections/meilisearch/reset", "POST")
 
                         if reset_result["success"]:
-                            st.success(f"✅ {reset_result['data']['message']}")
-                            st.info(f"삭제된 문서: {reset_result['data']['documents_deleted']:,}개")
+                            # API 응답 데이터 가져오기
+                            response_data = reset_result.get("data", {})
+                            st.success(f"✅ {response_data.get('message', 'MeiliSearch 인덱스 초기화 완료')}")
+                            st.info(f"삭제된 문서: {response_data.get('documents_deleted', 0):,}개")
                             # 상태 새로고침
-                            del st.session_state.collections_status
+                            if 'collections_status' in st.session_state:
+                                del st.session_state.collections_status
+                            # 페이지 새로고침으로 상태 업데이트
+                            st.rerun()
                         else:
-                            st.error(f"❌ 초기화 실패: {reset_result.get('error', 'Unknown error')}")
+                            error_msg = reset_result.get('error', 'Unknown error')
+                            status_code = reset_result.get('status_code', 'Unknown')
+                            st.error(f"❌ MeiliSearch 초기화 실패 (HTTP {status_code}): {error_msg}")
+                            # 디버깅을 위한 상세 정보
+                            with st.expander("상세 오류 정보"):
+                                st.json(reset_result)
 
                     st.session_state.confirm_meilisearch_reset = False
                 else:

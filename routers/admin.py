@@ -301,6 +301,11 @@ async def get_collections_status(authorization: str = Depends(verify_api_key)):
             "meilisearch": {
                 "health": meilisearch_health,
                 "stats": meilisearch_stats
+            },
+            "system_settings": {
+                "hash_duplicate_check_enabled": settings.enable_hash_duplicate_check,
+                "max_file_size_mb": settings.max_file_size_mb,
+                "storage_base_path": settings.storage_base_path
             }
         }
 

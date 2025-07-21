@@ -329,6 +329,10 @@ class DocumentProcessRequest(BaseModel):
         description="Model to use for embeddings",
         examples=["dragonkue/snowflake-arctic-embed-l-v2.0-ko"]
     )
+    enable_hash_check: Optional[bool] = Field(
+        None,
+        description="Whether to enable hash-based duplicate detection for this request. If None, uses system default setting."
+    )
 
 
 class DocumentProcessResponse(BaseModel):

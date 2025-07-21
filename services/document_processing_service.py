@@ -10,6 +10,7 @@ from services.file_upload_service import file_upload_service
 from services.marker_service import marker_service
 from services.docling_service import docling_service
 from services import chunking_service, embedding_service
+from services.unified_search_service import unified_search_service
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -198,7 +199,8 @@ class DocumentProcessingService:
     async def process_document(self, file_id: str, conversion_method: str = "auto",
                               extract_images: bool = False, chunk_strategy: Optional[str] = None,
                               chunk_size: Optional[int] = None, overlap: Optional[int] = None,
-                              generate_embeddings: bool = True, embedding_model: Optional[str] = None) -> Dict:
+                              generate_embeddings: bool = True, embedding_model: Optional[str] = None,
+                              enable_hash_check: Optional[bool] = None) -> Dict:
         """Process uploaded document through the full pipeline."""
         start_time = time.time()
         
@@ -216,8 +218,14 @@ class DocumentProcessingService:
             from services.database_service import database_service
             file_hash = file_info.get("file_hash")
 
-            if file_hash:
-                logger.info(f"🔍 중복 문서 검사 시작: {file_hash[:16]}...")
+            # Determine if hash check should be enabled for this request
+            # Priority: request parameter > system default setting
+            hash_check_enabled = enable_hash_check if enable_hash_check is not None else settings.enable_hash_duplicate_check
+
+            # Check for duplicate documents using hash - only if enabled
+            existing_document = None
+            if file_hash and hash_check_enabled:
+                logger.info(f"🔍 중복 문서 검사 시작 (요청별 설정: {enable_hash_check}, 시스템 기본값: {settings.enable_hash_duplicate_check}): {file_hash[:16]}...")
                 existing_document = database_service.find_document_by_file_hash(file_hash)
 
                 if existing_document:
@@ -246,6 +254,8 @@ class DocumentProcessingService:
                     }
                 else:
                     logger.info(f"✅ 새로운 파일 - 문서 처리 진행")
+            elif file_hash and not hash_check_enabled:
+                logger.info(f"🔍 중복 문서 검사 비활성화됨 (요청 설정: {enable_hash_check}, 시스템 기본값: {settings.enable_hash_duplicate_check})")
             else:
                 logger.warning(f"⚠️ 파일 해시 정보 없음 - 중복 검사 스킵")
             
@@ -388,12 +398,14 @@ class DocumentProcessingService:
             # Store in unified search service if embeddings were generated
             if embeddings_generated and chunks:
                 try:
-                    from services.unified_search_service import unified_search_service
 
-                    # Check if document with same hash already exists in vector DB
-                    if file_hash:
+                    # Check if document with same hash already exists in vector DB - only if enabled
+                    existing_in_vector_db = None
+                    if file_hash and hash_check_enabled:
                         logger.info(f"🔍 벡터 DB 중복 검사 시작")
                         existing_in_vector_db = await unified_search_service.check_document_exists_by_hash(file_hash)
+                    elif file_hash and not hash_check_enabled:
+                        logger.info(f"🔍 벡터 DB 중복 검사 비활성화됨 (요청 설정: {enable_hash_check}, 시스템 기본값: {settings.enable_hash_duplicate_check})")
 
                         if existing_in_vector_db:
                             logger.info(f"📋 벡터 DB에 동일 문서 존재 - 저장 스킵: {existing_in_vector_db}")
@@ -401,7 +413,8 @@ class DocumentProcessingService:
                             logger.info(f"✅ 벡터 DB에 새 문서 저장 진행")
 
                             # Prepare documents for unified search service
-                            documents = []
+                            # 1. Qdrant용 청크 문서들 (벡터 검색용)
+                            chunk_documents = []
                             for i, chunk in enumerate(chunks):
                                 # 청킹 서비스에서 text 필드에 텍스트를 저장하므로 이를 content로 매핑
                                 chunk_text = chunk.get("text", "")
@@ -429,11 +442,37 @@ class DocumentProcessingService:
                                         "file_hash": file_hash  # 중복 검사용 해시 추가
                                     }
                                 }
-                                documents.append(doc)
+                                chunk_documents.append(doc)
 
-                            # Store in unified search service (both vector and text backends)
-                            logger.info(f"💾 통합 검색 서비스에 문서 저장 시작: {len(documents)}개 청크")
-                            unified_success = await unified_search_service.store_documents(documents)
+                            # 2. Meilisearch용 전체 문서 (풀텍스트 검색용)
+                            full_document = {
+                                "id": document_id,  # 전체 문서는 document_id를 그대로 사용
+                                "document_id": document_id,
+                                "content": markdown_content,  # 전체 마크다운 내용
+                                "title": file_info["filename"],
+                                "file_name": file_info["filename"],
+                                "file_type": file_type.value,
+                                "file_size": file_info.get("size", 0),
+                                "created_at": time.time(),
+                                "chunk_count": len(chunks),  # 청크 개수 정보
+                                "metadata": {
+                                    "filename": file_info["filename"],
+                                    "file_type": file_type.value,
+                                    "conversion_method": method,
+                                    "created_at": time.time(),
+                                    "document_id": document_id,
+                                    "content": markdown_content,  # MeiliSearch용 전체 내용
+                                    "file_hash": file_hash,  # 중복 검사용 해시 추가
+                                    "chunk_count": len(chunks)
+                                }
+                            }
+
+                            # Store in unified search service (hybrid approach)
+                            logger.info(f"💾 통합 검색 서비스에 문서 저장 시작: {len(chunk_documents)}개 청크 + 1개 전체 문서")
+                            unified_success = await unified_search_service.store_documents(
+                                documents=chunk_documents,
+                                full_document=full_document
+                            )
 
                             if unified_success:
                                 logger.info(f"✅ 통합 검색 서비스 저장 완료: {document_id}")

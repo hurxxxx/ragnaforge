@@ -60,6 +60,7 @@ async def upload_and_process_document(
     overlap: Optional[int] = None,
     generate_embeddings: bool = True,
     embedding_model: Optional[str] = None,
+    enable_hash_check: Optional[bool] = None,
     authorization: str = Depends(verify_api_key)
 ):
     """Upload a file and process it through the full pipeline in one request.
@@ -70,6 +71,12 @@ async def upload_and_process_document(
     3. Split text into chunks
     4. Generate embeddings
     5. Store in vector and text search databases
+
+    Parameters:
+    - enable_hash_check: Optional boolean to override system default hash duplicate detection.
+      - None (default): Use system setting (ENABLE_HASH_DUPLICATE_CHECK)
+      - True: Enable hash-based duplicate detection for this request
+      - False: Disable hash-based duplicate detection for this request
 
     Returns the complete processing results including file info, chunks, and storage status.
     """
@@ -104,7 +111,8 @@ async def upload_and_process_document(
             chunk_size=chunk_size,
             overlap=overlap,
             generate_embeddings=generate_embeddings,
-            embedding_model=embedding_model
+            embedding_model=embedding_model,
+            enable_hash_check=enable_hash_check
         )
 
         # Add upload info to result
@@ -144,7 +152,8 @@ async def process_document(
             chunk_size=request.chunk_size,
             overlap=request.overlap,
             generate_embeddings=request.generate_embeddings,
-            embedding_model=request.embedding_model
+            embedding_model=request.embedding_model,
+            enable_hash_check=request.enable_hash_check
         )
         return DocumentProcessResponse(**result)
     except Exception as e:

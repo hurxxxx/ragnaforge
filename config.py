@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     temp_dir: str = "temp"
     max_file_size_mb: int = 50
 
+    # File Duplicate Detection Configuration
+    enable_hash_duplicate_check: bool = False
+
     # Rerank Configuration (Optimized for 100→50 workflow)
     rerank_enabled: bool = True
     rerank_model: str = "dragonkue/bge-reranker-v2-m3-ko"

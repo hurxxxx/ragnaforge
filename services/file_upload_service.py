@@ -246,25 +246,32 @@ class FileUploadService:
                 gc.collect()
                 logger.info(f"🧹 대용량 파일 메모리 정리 완료")
 
-            # Check for duplicate files using hash (with cache)
-            logger.info(f"🔍 중복 파일 검사 시작")
-            duplicate_check_start = time.time()
+            # Check for duplicate files using hash (with cache) - only if enabled
+            existing_file = None
+            detection_method = "disabled"
 
-            # First check cache
-            existing_file = self._check_hash_cache(file_hash)
-            detection_method = "cache"
+            if settings.enable_hash_duplicate_check:
+                logger.info(f"🔍 중복 파일 검사 시작")
+                duplicate_check_start = time.time()
 
-            if existing_file:
-                logger.info(f"📋 캐시에서 중복 파일 발견: {existing_file['filename']}")
-            else:
-                # Check database if not in cache
-                from services.database_service import database_service
-                existing_file = database_service.find_file_by_hash(file_hash)
-                detection_method = "database"
+                # First check cache
+                existing_file = self._check_hash_cache(file_hash)
+                detection_method = "cache"
 
-                # Update cache if found
                 if existing_file:
-                    self._update_hash_cache(file_hash, existing_file)
+                    logger.info(f"📋 캐시에서 중복 파일 발견: {existing_file['filename']}")
+                else:
+                    # Check database if not in cache
+                    from services.database_service import database_service
+                    existing_file = database_service.find_file_by_hash(file_hash)
+                    detection_method = "database"
+
+                    # Update cache if found
+                    if existing_file:
+                        self._update_hash_cache(file_hash, existing_file)
+            else:
+                logger.info(f"🔍 중복 파일 검사 비활성화됨 (ENABLE_HASH_DUPLICATE_CHECK=false)")
+                duplicate_check_start = time.time()
 
             duplicate_check_duration = (time.time() - duplicate_check_start) * 1000
 
