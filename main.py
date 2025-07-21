@@ -1,4 +1,4 @@
-"""Main FastAPI application for KURE embedding API - Refactored with routers."""
+"""Main FastAPI application for Ragnaforge RAG API - Refactored with routers."""
 
 import logging
 import time
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
-    logger.info("Starting KURE API service...")
+    logger.info("Starting Ragnaforge RAG API service...")
     start_time = time.time()
 
     try:
@@ -66,16 +66,16 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️ Rerank service initialization failed: {e}")
 
         startup_time = time.time() - start_time
-        logger.info(f"🚀 KURE API service started successfully in {startup_time:.2f} seconds")
+        logger.info(f"🚀 Ragnaforge RAG API service started successfully in {startup_time:.2f} seconds")
 
     except Exception as e:
-        logger.error(f"❌ Failed to start KURE API service: {str(e)}")
+        logger.error(f"❌ Failed to start Ragnaforge RAG API service: {str(e)}")
         raise
 
     yield
 
     # Shutdown
-    logger.info("Shutting down KURE API service...")
+    logger.info("Shutting down Ragnaforge RAG API service...")
     try:
         # Clean up old uploaded files
         try:
@@ -94,15 +94,15 @@ async def lifespan(app: FastAPI):
         # Clean up embedding service
         embedding_service.cleanup_memory()
 
-        logger.info("✅ KURE API service shutdown completed")
+        logger.info("✅ Ragnaforge RAG API service shutdown completed")
     except Exception as e:
         logger.error(f"❌ Error during shutdown: {str(e)}")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="KURE Embedding API",
-    description="Korean Universal Representation Embedding API with document processing and search capabilities",
+    title="Ragnaforge RAG API",
+    description="Korean-optimized RAG system with hybrid search and document intelligence",
     version=settings.app_version,
     lifespan=lifespan
 )
@@ -122,7 +122,7 @@ app.add_middleware(
 async def root():
     """Root endpoint."""
     return {
-        "message": "KURE Embedding API",
+        "message": "Ragnaforge RAG API",
         "version": settings.app_version,
         "docs": "/docs",
         "health": "/health"

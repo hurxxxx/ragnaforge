@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     """Application settings."""
 
     # API Configuration
-    app_name: str = "KURE Embedding API"
+    app_name: str = "Ragnaforge RAG API"
     app_version: str = "1.0.0"
-    app_description: str = "OpenAPI-compatible service for KURE Korean embedding models"
+    app_description: str = "Korean-optimized RAG system with hybrid search and document intelligence"
 
     # Server Configuration
     host: str = "0.0.0.0"

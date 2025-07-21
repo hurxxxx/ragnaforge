@@ -1,5 +1,5 @@
 """
-KURE 문서 검색 시스템 - Streamlit UI
+Ragnaforge RAG 시스템 - Streamlit UI
 종합적인 문서 관리, 검색, 챗봇 기능을 제공하는 데모 인터페이스
 """
 
@@ -16,7 +16,7 @@ from config import settings
 
 # 페이지 설정
 st.set_page_config(
-    page_title="KURE Search System",
+    page_title="Ragnaforge RAG System",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -24,7 +24,7 @@ st.set_page_config(
 
 # 전역 설정
 API_BASE_URL = "http://localhost:8000"
-DEFAULT_API_KEY = "sk-kure-v1-test-key-12345"
+DEFAULT_API_KEY = "sk-ragnaforge-v1-test-key-12345"
 
 # CSS 스타일링
 st.markdown("""
@@ -145,7 +145,7 @@ if 'search_results' not in st.session_state:
     st.session_state.search_results = []
 
 # 메인 헤더
-st.markdown('<div class="main-header">🔍 KURE 문서 검색 시스템</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🔍 Ragnaforge RAG 시스템</div>', unsafe_allow_html=True)
 
 # 사이드바 - 설정 및 상태
 with st.sidebar:
@@ -748,7 +748,7 @@ with tab5:
 st.divider()
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 1rem;">
-    🔍 KURE 문서 검색 시스템 v1.0 |
+    🔍 Ragnaforge RAG 시스템 v1.0 |
     Powered by FastAPI + Streamlit |
     <a href="https://github.com/hurxxxx/ragnaforge" target="_blank">GitHub</a>
 </div>

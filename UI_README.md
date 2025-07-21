@@ -1,8 +1,8 @@
-# 🔍 KURE 문서 검색 시스템 - UI 가이드
+# 🔍 Ragnaforge RAG 시스템 - UI 가이드
 
 ## 📋 개요
 
-KURE 문서 검색 시스템의 Streamlit 기반 웹 UI입니다. 직관적인 인터페이스를 통해 문서 업로드, 검색, AI 챗봇 등의 모든 기능을 쉽게 사용할 수 있습니다.
+Ragnaforge RAG 시스템의 Streamlit 기반 웹 UI입니다. 직관적인 인터페이스를 통해 문서 업로드, 검색, AI 챗봇 등의 모든 기능을 쉽게 사용할 수 있습니다.
 
 ## 🚀 빠른 시작
 
@@ -76,7 +76,7 @@ streamlit run streamlit_app.py
 ## 🔧 설정 옵션
 
 ### API 설정
-- **API 키**: 기본값 `sk-kure-v1-test-key-12345`
+- **API 키**: 기본값 `sk-ragnaforge-v1-test-key-12345`
 - **서버 URL**: 기본값 `http://localhost:8000`
 
 ### 검색 설정
