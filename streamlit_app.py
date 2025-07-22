@@ -340,7 +340,7 @@ with tab2:
         query = st.text_input("검색어를 입력하세요", placeholder="예: 한국어 자연어 처리")
     
     with col_search2:
-        search_type = st.selectbox("검색 타입", ["hybrid", "vector", "text"])
+        search_type = st.selectbox("검색 타입", ["vector", "text"])
     
     # 고급 설정
     with st.expander("🔧 고급 검색 설정"):
@@ -351,10 +351,7 @@ with tab2:
             score_threshold = st.number_input("점수 임계값", min_value=0.0, max_value=1.0, value=settings.default_score_threshold, step=0.1)
         
         with col_adv2:
-            if search_type == "hybrid":
-                vector_weight = st.slider("벡터 가중치", 0.0, 1.0, settings.default_vector_weight)
-                text_weight = 1.0 - vector_weight
-                st.write(f"텍스트 가중치: {text_weight:.1f}")
+            st.write("")  # 빈 공간
         
         with col_adv3:
             rerank = st.checkbox("리랭킹 적용", value=True, key="search_rerank")
@@ -383,18 +380,6 @@ with tab2:
                     })
             elif search_type == "text":
                 search_data["highlight"] = True
-            elif search_type == "hybrid":
-                search_data.update({
-                    "vector_weight": vector_weight,
-                    "text_weight": text_weight,
-                    "embedding_model": "nlpai-lab/KURE-v1"
-                })
-                if rerank:
-                    search_data.update({
-                        "rerank": True,
-                        "rerank_top_k": rerank_top_k,
-                        "rerank_final_k": rerank_final_k
-                    })
             
             search_result = make_api_request(f"/v1/search/{search_type}", "POST", search_data)
             
@@ -466,11 +451,7 @@ with tab3:
                         if search_source:
                             st.write(f"검색 소스: {search_source}")
                         
-                        # 하이브리드 검색 점수
-                        if "hybrid_score" in metadata:
-                            st.write(f"하이브리드 점수: {metadata['hybrid_score']:.3f}")
-                            st.write(f"벡터 점수: {metadata.get('vector_score', 0):.3f}")
-                            st.write(f"텍스트 점수: {metadata.get('text_score', 0):.3f}")
+
         else:
             st.info("검색 결과가 없습니다.")
     else:
@@ -547,7 +528,7 @@ with tab4:
                             "rerank_top_k": search_limit * 2
                         })
 
-                    search_result = make_api_request("/v1/search/hybrid", "POST", search_data)
+                    search_result = make_api_request("/v1/search/vector", "POST", search_data)
 
                     if search_result["success"]:
                         search_results = search_result["data"].get("results", [])

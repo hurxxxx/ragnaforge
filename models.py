@@ -542,13 +542,6 @@ class DataRepairResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if repair failed")
 
 
-class MonitoringStatsResponse(BaseModel):
-    """Response for simplified monitoring statistics."""
-
-    success: bool = Field(..., description="Whether the request was successful")
-    duplicate_detection: Dict[str, Any] = Field(..., description="Basic duplicate detection statistics")
-    performance: Dict[str, Any] = Field(..., description="Basic performance statistics")
-    system_info: Dict[str, Any] = Field(..., description="System information")
 
 
 class DuplicateAnalyticsResponse(BaseModel):
@@ -591,9 +584,9 @@ class SearchRequest(BaseModel):
 
     query: str = Field(..., description="Search query", examples=["인공지능 기술 문서"], min_length=1)
     search_type: str = Field(
-        "hybrid",
+        "vector",
         description="Type of search to perform",
-        examples=["hybrid"]
+        examples=["vector", "text"]
     )
     limit: int = Field(default_factory=lambda: settings.default_search_limit, description="Maximum number of results", ge=1, le=1000)
     offset: int = Field(0, description="Number of results to skip", ge=0)
@@ -608,41 +601,18 @@ class SearchRequest(BaseModel):
         "json_schema_extra": {
             "example": {
                 "query": "인공지능 기술 문서",
-                "search_type": "hybrid",
+                "search_type": "vector",
                 "limit": 10,
                 "filters": {
                     "file_type": ["pdf", "docx"],
                     "date_range": "2024-01-01 to 2024-12-31"
-                },
-                "hybrid_config": {
-                    "vector_weight": 0.6,
-                    "text_weight": 0.4
                 }
             }
         }
     }
 
 
-class HybridSearchRequest(SearchRequest):
-    """Request model for hybrid search with additional configuration."""
 
-    vector_weight: float = Field(default_factory=lambda: settings.default_vector_weight, description="Weight for vector search results", ge=0.0, le=1.0)
-    text_weight: float = Field(default_factory=lambda: settings.default_text_weight, description="Weight for text search results", ge=0.0, le=1.0)
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "query": "인공지능 기술 문서",
-                "search_type": "hybrid",
-                "limit": 10,
-                "vector_weight": 0.6,
-                "text_weight": 0.4,
-                "filters": {
-                    "file_type": ["pdf", "docx"]
-                }
-            }
-        }
-    }
 
 
 class SearchResult(BaseModel):
@@ -669,23 +639,10 @@ class SearchResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if search failed")
 
 
-class HybridSearchResponse(SearchResponse):
-    """Response model for hybrid search with additional metrics."""
-
-    vector_results_count: int = Field(..., description="Number of vector search results")
-    text_results_count: int = Field(..., description="Number of text search results")
-    weights: Dict[str, float] = Field(..., description="Weights used for result fusion")
-    backends: Dict[str, str] = Field(..., description="Backends used for search")
 
 
-class SearchStatsResponse(BaseModel):
-    """Response model for search statistics."""
 
-    success: bool = Field(..., description="Whether the request was successful")
-    unified_search: Dict[str, Any] = Field(..., description="Unified search service stats")
-    vector_backend: Dict[str, Any] = Field(..., description="Vector backend statistics")
-    text_backend: Dict[str, Any] = Field(..., description="Text backend statistics")
-    available_backends: Dict[str, List[str]] = Field(..., description="Available backends")
+
 
 
 # Rerank Models

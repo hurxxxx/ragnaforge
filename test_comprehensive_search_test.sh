@@ -457,69 +457,7 @@ test_vector_search "AI" "200" "rerank 테스트" ', "rerank": true, "rerank_top_
 test_vector_search "" "422" "빈 검색어 벡터 검색 (422 예상)"
 test_vector_search "존재하지않는매우특이한검색어12345" "200" "존재하지 않는 검색어"
 
-# 하이브리드 검색 테스트
-echo -e "${CYAN}=== 하이브리드 검색 테스트 ===${NC}"
 
-test_hybrid_search() {
-    local query="$1"
-    local expected_status="$2"
-    local test_description="$3"
-    local additional_params="$4"
-
-    # Escape special characters in query for JSON using Python
-    local escaped_query=$(python3 -c "
-import json
-import sys
-query = '''$query'''
-print(json.dumps(query)[1:-1])
-" 2>/dev/null || echo "$query")
-    local json_data="{\"query\": \"$escaped_query\", \"limit\": 5, \"highlight\": true$additional_params}"
-
-    response=$(make_request "POST" "/v1/search/hybrid" "$json_data" "Authorization: Bearer $API_KEY")
-    status_code=$(echo "$response" | cut -d'|' -f1)
-    response_body=$(echo "$response" | cut -d'|' -f2-)
-
-    if [ "$status_code" = "$expected_status" ]; then
-        if [ "$expected_status" = "200" ]; then
-            success_check=$(validate_json_field "$response_body" "success" "true" "eq")
-            search_type_check=$(validate_json_field "$response_body" "search_type" "hybrid" "eq")
-
-            if [ "$success_check" = "PASS" ] && [ "$search_type_check" = "PASS" ]; then
-                # 가중치 확인
-                vector_weight=$(echo "$response_body" | jq -r '.weights.vector' 2>/dev/null)
-                text_weight=$(echo "$response_body" | jq -r '.weights.text' 2>/dev/null)
-
-                if [ "$vector_weight" != "null" ] && [ "$text_weight" != "null" ]; then
-                    log_test "$test_description" "PASS" ""
-                else
-                    log_test "$test_description" "FAIL" "가중치 정보 누락"
-                fi
-            else
-                log_test "$test_description" "FAIL" "응답 형식 오류"
-            fi
-        else
-            log_test "$test_description" "PASS" ""
-        fi
-    else
-        log_test "$test_description" "FAIL" "HTTP $status_code (예상: $expected_status)"
-    fi
-}
-
-# 정상 하이브리드 검색
-test_hybrid_search "인공지능" "200" "기본 하이브리드 검색"
-test_hybrid_search "AI technology" "200" "영어 하이브리드 검색"
-test_hybrid_search "머신러닝 Python" "200" "혼합 키워드 하이브리드 검색"
-
-# 가중치 테스트
-test_hybrid_search "AI" "200" "벡터 가중치 높음" ', "vector_weight": 0.8, "text_weight": 0.2'
-test_hybrid_search "AI" "200" "텍스트 가중치 높음" ', "vector_weight": 0.3, "text_weight": 0.7'
-test_hybrid_search "AI" "200" "동일 가중치" ', "vector_weight": 0.5, "text_weight": 0.5'
-
-# 잘못된 가중치 (정규화 테스트)
-test_hybrid_search "AI" "200" "가중치 합이 1이 아님 (정규화 테스트)" ', "vector_weight": 0.6, "text_weight": 0.6'
-
-# 리랭킹 테스트
-test_hybrid_search "인공지능 머신러닝" "200" "리랭킹 활성화" ', "rerank": true, "rerank_top_k": 20'
 
 # 극한 상황 테스트
 echo -e "${CYAN}=== 극한 상황 테스트 ===${NC}"

@@ -137,8 +137,7 @@ class FileUploadService:
         """Upload and store file."""
         start_time = time.time()
 
-        # Import monitoring service
-        from services.monitoring_service import monitoring_service
+
 
         logger.info(f"📁 파일 업로드 시작: {file.filename} ({getattr(file, 'size', 'unknown')} bytes)")
 
@@ -210,24 +209,13 @@ class FileUploadService:
                 file_hash = await self._calculate_file_hash_async(content)
                 hash_duration = (time.time() - hash_start_time) * 1000  # Convert to ms
 
-                # Log performance metric
-                monitoring_service.log_performance_metric(
-                    operation="hash_calculation",
-                    duration_ms=hash_duration,
-                    success=True
-                )
+
 
                 logger.info(f"🔍 파일 해시 계산 완료: {file_hash[:16]}... ({hash_duration:.1f}ms)")
             except Exception as e:
                 hash_duration = (time.time() - hash_start_time) * 1000
 
-                # Log performance metric for failure
-                monitoring_service.log_performance_metric(
-                    operation="hash_calculation",
-                    duration_ms=hash_duration,
-                    success=False,
-                    error_message=str(e)
-                )
+
 
                 logger.error(f"파일 해시 계산 실패: {e}")
                 # Use fallback identifier
@@ -275,24 +263,13 @@ class FileUploadService:
 
             duplicate_check_duration = (time.time() - duplicate_check_start) * 1000
 
-            # Log duplicate check performance
-            monitoring_service.log_performance_metric(
-                operation="duplicate_check",
-                duration_ms=duplicate_check_duration,
-                success=True
-            )
+
 
             if existing_file:
                 new_upload_count = existing_file['upload_count'] + 1
                 logger.info(f"📋 중복 파일 발견: {existing_file['filename']} (업로드 횟수: {new_upload_count})")
 
-                # Log duplicate event
-                monitoring_service.log_duplicate_event(
-                    file_hash=file_hash,
-                    filename=file.filename,
-                    file_size=file_size,
-                    upload_count=new_upload_count
-                )
+
 
                 # Increment upload count for existing file
                 from services.database_service import database_service
@@ -302,13 +279,7 @@ class FileUploadService:
                 if temp_file_path.exists():
                     temp_file_path.unlink()
 
-                # Log upload performance
-                upload_duration = (time.time() - start_time) * 1000
-                monitoring_service.log_performance_metric(
-                    operation="upload_duplicate",
-                    duration_ms=upload_duration,
-                    success=True
-                )
+
 
                 return {
                     "success": True,
@@ -397,13 +368,7 @@ class FileUploadService:
             
             logger.info(f"File uploaded successfully: {file.filename} -> {file_id}")
 
-            # Log successful upload performance
-            upload_duration = (time.time() - start_time) * 1000
-            monitoring_service.log_performance_metric(
-                operation="upload_new",
-                duration_ms=upload_duration,
-                success=True
-            )
+
 
             return {
                 "success": True,
@@ -423,14 +388,7 @@ class FileUploadService:
         except Exception as e:
             logger.error(f"Error uploading file {file.filename}: {str(e)}")
 
-            # Log upload failure
-            upload_duration = (time.time() - start_time) * 1000
-            monitoring_service.log_performance_metric(
-                operation="upload_failed",
-                duration_ms=upload_duration,
-                success=False,
-                error_message=str(e)
-            )
+
 
             return {
                 "success": False,

@@ -1,11 +1,10 @@
-"""Administrative and monitoring API routes."""
+"""Administrative API routes."""
 
 import logging
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import Optional
 
 from models import (
-    MonitoringStatsResponse,
     QdrantStatsResponse,
     StorageStatsResponse, StorageFilesResponse, StorageCleanupResponse,
     DuplicateStatsResponse, DuplicateListResponse,
@@ -27,26 +26,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1")
 
 
-# Monitoring endpoints
-@router.get("/monitoring/stats", response_model=MonitoringStatsResponse)
-async def get_monitoring_stats(
-    authorization: str = Depends(verify_api_key)
-):
-    """Get basic monitoring statistics."""
-    try:
-        from services.monitoring_service import monitoring_service
-
-        stats = monitoring_service.get_basic_stats()
-        return MonitoringStatsResponse(
-            success=True,
-            **stats
-        )
-    except Exception as e:
-        logger.error(f"Error getting monitoring stats: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get monitoring stats: {str(e)}"
-        )
 
 
 # Qdrant management endpoints

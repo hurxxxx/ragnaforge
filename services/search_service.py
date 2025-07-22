@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from services.qdrant_service import qdrant_service
 from services import embedding_service
 from config import settings
@@ -176,77 +176,9 @@ class SearchService:
             logger.error(f"Error deleting document from Qdrant: {str(e)}")
             return False
     
-    async def hybrid_search(self, query: str, limit: int = 10,
-                          vector_weight: float = 0.7,
-                          text_weight: float = 0.3,
-                          document_filter: Optional[Dict] = None) -> Dict:
-        """
-        Perform hybrid search combining vector similarity and text matching.
-        """
-        try:
-            # Use unified search service if available and initialized
-            if self.unified_service.is_initialized:
-                logger.info(f"Using unified search service for hybrid search: '{query[:50]}...'")
-                result = await self.unified_service.hybrid_search(
-                    query=query,
-                    limit=limit,
-                    vector_weight=vector_weight,
-                    text_weight=text_weight,
-                    filters=document_filter
-                )
-                return result
-            else:
-                # Fallback to vector search only
-                logger.warning("Unified search service not initialized, falling back to vector search only")
-                return await self.vector_search(
-                    query=query,
-                    limit=limit,
-                    document_filter=document_filter
-                )
 
-        except Exception as e:
-            logger.error(f"Error in hybrid search: {str(e)}")
-            # Fallback to vector search
-            return await self.vector_search(
-                query=query,
-                limit=limit,
-                document_filter=document_filter
-            )
     
-    def get_search_stats(self) -> Dict:
-        """Get search-related statistics."""
-        try:
-            qdrant_stats = qdrant_service.get_collection_stats()
-            
-            stats = {
-                "vector_database": {
-                    "status": "connected",
-                    "collection_name": qdrant_stats.get("collection_name", ""),
-                    "total_chunks": qdrant_stats.get("points_count", 0),
-                    "indexed_vectors": qdrant_stats.get("indexed_vectors_count", 0),
-                    "disk_size_mb": qdrant_stats.get("disk_data_size", 0) / (1024 * 1024),
-                    "ram_size_mb": qdrant_stats.get("ram_data_size", 0) / (1024 * 1024)
-                },
-                "search_capabilities": {
-                    "vector_search": True,
-                    "hybrid_search": self.unified_service.is_initialized,
-                    "full_text_search": self.unified_service.is_initialized
-                },
-                "embedding_models": {
-                    "default_model": settings.default_model,
-                    "available_models": ["nlpai-lab/KURE-v1", "nlpai-lab/KoE5"]
-                }
-            }
-            
-            return stats
-            
-        except Exception as e:
-            logger.error(f"Error getting search stats: {str(e)}")
-            return {
-                "vector_database": {"status": "error", "error": str(e)},
-                "search_capabilities": {"vector_search": False},
-                "embedding_models": {"default_model": settings.default_model}
-            }
+
 
 
 # Global service instance

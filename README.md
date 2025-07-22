@@ -76,7 +76,6 @@ POST /similarity       # 텍스트 유사도 계산
 ```http
 POST /v1/search/vector    # 벡터 검색
 POST /v1/search/text      # 텍스트 검색
-POST /v1/search/hybrid    # 하이브리드 검색
 ```
 
 ### 🔧 시스템 관리

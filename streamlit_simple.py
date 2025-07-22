@@ -275,7 +275,7 @@ with tab3:
     col_search1, col_search2 = st.columns([2, 1])
     
     with col_search1:
-        search_type = st.selectbox("검색 타입", ["hybrid", "vector", "text"])
+        search_type = st.selectbox("검색 타입", ["vector", "text"])
     
     with col_search2:
         limit = st.number_input("결과 수", min_value=1, max_value=50, value=10)

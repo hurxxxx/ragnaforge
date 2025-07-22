@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     # API Configuration
     app_name: str = "Ragnaforge RAG API"
     app_version: str = "1.0.0"
-    app_description: str = "Korean-optimized RAG system with hybrid search and document intelligence"
+    app_description: str = "Korean-optimized RAG system with vector and text search capabilities"
 
     # Server Configuration
     host: str = "0.0.0.0"
@@ -49,12 +49,10 @@ class Settings(BaseSettings):
     default_chunk_overlap: int = 100  # ~13% overlap for better context continuity
     default_chunk_language: str = "auto"
 
-    # Search Defaults (Optimized for hybrid search + rerank workflow)
-    default_search_limit: int = 100  # Default number of search results (hybrid search)
+    # Search Defaults
+    default_search_limit: int = 100  # Default number of search results
     default_score_threshold: float = 0.0  # Default minimum similarity score
-    default_vector_weight: float = 0.7  # Default vector weight for hybrid search
-    default_text_weight: float = 0.3  # Default text weight for hybrid search
-    search_expansion_factor: int = 3  # Multiplier for initial search when using fusion/rerank
+    search_expansion_factor: int = 3  # Multiplier for initial search when using rerank
 
     # OpenAI API Configuration
     openai_api_key: Optional[str] = None

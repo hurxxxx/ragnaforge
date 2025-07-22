@@ -225,27 +225,8 @@ test_api "텍스트 검색 + 하이라이트" "POST" "$API_BASE/v1/search/text" 
 test_api "텍스트 검색 + 오프셋" "POST" "$API_BASE/v1/search/text" \
     "{\"query\": \"$SEARCH_QUERY\", \"limit\": 3, \"offset\": 2}" "200"
 
-# 5. 하이브리드 검색 테스트
-print_header "5️⃣ 하이브리드 검색 테스트"
-
-# 5-1. 기본 하이브리드 검색
-test_api "기본 하이브리드 검색" "POST" "$API_BASE/v1/search/hybrid" \
-    "{\"query\": \"$SEARCH_QUERY\", \"vector_weight\": 0.6, \"text_weight\": 0.4, \"limit\": 3}" "200"
-
-# 5-2. 하이브리드 검색 + 리랭킹
-test_api "하이브리드 검색 + 리랭킹" "POST" "$API_BASE/v1/search/hybrid" \
-    "{\"query\": \"$SEARCH_QUERY\", \"vector_weight\": 0.7, \"text_weight\": 0.3, \"limit\": 5, \"rerank\": true}" "200"
-
-# 5-3. 벡터 중심 하이브리드 검색
-test_api "벡터 중심 하이브리드" "POST" "$API_BASE/v1/search/hybrid" \
-    "{\"query\": \"$SEARCH_QUERY\", \"vector_weight\": 0.9, \"text_weight\": 0.1, \"limit\": 3}" "200"
-
-# 5-4. 텍스트 중심 하이브리드 검색
-test_api "텍스트 중심 하이브리드" "POST" "$API_BASE/v1/search/hybrid" \
-    "{\"query\": \"$SEARCH_QUERY\", \"vector_weight\": 0.2, \"text_weight\": 0.8, \"limit\": 3}" "200"
-
-# 6. 리랭킹 전용 테스트
-print_header "6️⃣ 리랭킹 전용 테스트"
+# 5. 리랭킹 전용 테스트
+print_header "5️⃣ 리랭킹 전용 테스트"
 
 # 간단한 문서 리스트로 리랭킹 테스트
 test_api "리랭킹 전용" "POST" "$API_BASE/v1/rerank" \
@@ -259,7 +240,6 @@ print_info "테스트된 기능:"
 echo "   • 파일 업로드 및 전체 처리 파이프라인"
 echo "   • 벡터 검색 (기본, 리랭킹, 점수 임계값)"
 echo "   • 텍스트 검색 (기본, 하이라이트, 오프셋)"
-echo "   • 하이브리드 검색 (다양한 가중치, 리랭킹)"
 echo "   • 리랭킹 전용 API"
 
 print_info "이제 RagnaForge가 완전히 작동하는 것을 확인했습니다! 🚀"
