@@ -79,14 +79,17 @@ class QdrantService:
             logger.error(f"Error ensuring collection exists: {str(e)}")
             raise
     
-    def store_document_chunks(self, document_id: str, chunks: List[Dict], 
+    def store_document_chunks(self, document_id: str, chunks: List[Dict],
                             document_metadata: Dict) -> bool:
         """Store document chunks with embeddings in Qdrant."""
         try:
             if not chunks:
                 logger.warning(f"No chunks to store for document {document_id}")
                 return True
-            
+
+            # Ensure collection exists before storing
+            self._ensure_collection_exists()
+
             points = []
             for i, chunk in enumerate(chunks):
                 if "embedding" not in chunk:

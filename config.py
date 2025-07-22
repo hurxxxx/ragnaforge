@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Text Chunking Defaults (Research-based optimization for business documents)
-    default_chunk_strategy: str = "semantic"
+    default_chunk_strategy: str = "token" #semantic , recursive, sentence, token
     default_chunk_size: int = 768  # Optimal range: 512-1024 tokens (research-backed)
     default_chunk_overlap: int = 100  # ~13% overlap for better context continuity
     default_chunk_language: str = "auto"

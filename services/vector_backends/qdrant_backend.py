@@ -141,43 +141,46 @@ class QdrantVectorBackend(VectorSearchInterface):
             if not documents:
                 logger.warning("No documents provided for storage")
                 return True
-            
+
+            # Ensure collection exists before storing
+            await self._ensure_collection_exists()
+
             points = []
             for doc in documents:
                 if not all(key in doc for key in ['id', 'embedding']):
                     logger.warning(f"Document missing required fields: {doc.keys()}")
                     continue
-                
+
                 # Create point ID
                 point_id = str(uuid.uuid4()) if 'point_id' not in doc else doc['point_id']
-                
+
                 # Prepare payload (metadata)
                 payload = doc.get('metadata', {})
                 payload.update({
                     'document_id': doc['id'],
                     'created_at': time.time()
                 })
-                
+
                 point = PointStruct(
                     id=point_id,
                     vector=doc['embedding'],
                     payload=payload
                 )
                 points.append(point)
-            
+
             if not points:
                 logger.warning("No valid points to store")
                 return True
-            
+
             # Batch upsert points
             self.client.upsert(
                 collection_name=self.collection_name,
                 points=points
             )
-            
+
             logger.info(f"Stored {len(points)} embeddings in Qdrant")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error storing embeddings in Qdrant: {str(e)}")
             return False
@@ -189,6 +192,9 @@ class QdrantVectorBackend(VectorSearchInterface):
                            filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Search for similar vectors in Qdrant."""
         try:
+            # Ensure collection exists before searching
+            await self._ensure_collection_exists()
+
             # Prepare query filter
             query_filter = None
             if filters:
@@ -348,6 +354,9 @@ class QdrantVectorBackend(VectorSearchInterface):
                          filters: Optional[Dict[str, Any]] = None) -> List[List[Dict[str, Any]]]:
         """Perform batch similarity search."""
         try:
+            # Ensure collection exists before searching
+            await self._ensure_collection_exists()
+
             # Prepare search requests
             search_requests = []
             for query_vector in query_vectors:

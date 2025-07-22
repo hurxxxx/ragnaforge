@@ -187,7 +187,7 @@ with tab2:
         
         with col1:
             conversion_method = st.selectbox("변환 방법", ["marker", "docling"], index=0)
-            chunk_strategy = st.selectbox("청킹 전략", ["semantic", "recursive", "sentence", "token"], index=0)
+            chunk_strategy = st.selectbox("청킹 전략", ["token", "semantic", "recursive", "sentence"], index=0)
         
         with col2:
             chunk_size = st.number_input("청크 크기", min_value=100, max_value=2048, value=768)

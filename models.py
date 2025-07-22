@@ -168,7 +168,7 @@ class ChunkRequest(BaseModel):
     @classmethod
     def validate_strategy(cls, v):
         if v is not None:
-            allowed_strategies = ["sentence", "recursive", "token"]
+            allowed_strategies = ["token", "sentence", "recursive", "semantic"]
             if v not in allowed_strategies:
                 raise ValueError(f"Strategy must be one of {allowed_strategies}")
         return v

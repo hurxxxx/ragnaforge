@@ -89,7 +89,7 @@ class EmbeddingService:
         return self._models[target_model]
 
     def encode_texts(self, texts: List[str], model_name: Optional[str] = None, batch_size: Optional[int] = None) -> np.ndarray:
-        """Encode texts to embeddings with optimized batch processing."""
+        """Encode texts to embeddings with optimized batch processing and GPU memory management."""
         model = self.get_model(model_name)
         target_model = model_name or settings.default_model
 
@@ -103,31 +103,61 @@ class EmbeddingService:
         else:
             processed_texts = texts
 
-        try:
-            # GPU 메모리 모니터링
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+        # GPU 메모리 부족 시 배치 크기를 동적으로 줄이는 재시도 로직
+        original_batch_size = batch_size
+        retry_count = 0
+        max_retries = 3
 
-            embeddings = model.encode(
-                processed_texts,
-                batch_size=batch_size,
-                convert_to_numpy=True,
-                normalize_embeddings=True,
-                show_progress_bar=False,  # API에서는 진행바 비활성화
-                device=model.device if hasattr(model, 'device') else None
-            )
+        while retry_count <= max_retries:
+            try:
+                # GPU 메모리 모니터링
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    logger.info(f"GPU 메모리 상태 - 할당됨: {torch.cuda.memory_allocated() / 1024**3:.2f}GB, "
+                              f"예약됨: {torch.cuda.memory_reserved() / 1024**3:.2f}GB")
 
-            # GPU 메모리 정리
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+                logger.info(f"임베딩 생성 시도 - 배치 크기: {batch_size}, 텍스트 수: {len(processed_texts)}")
 
-            return embeddings
-        except Exception as e:
-            logger.error(f"Failed to encode texts with model {target_model}: {str(e)}")
-            # GPU 메모리 정리 (오류 시에도)
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            raise
+                embeddings = model.encode(
+                    processed_texts,
+                    batch_size=batch_size,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True,
+                    show_progress_bar=False,  # API에서는 진행바 비활성화
+                    device=model.device if hasattr(model, 'device') else None
+                )
+
+                # GPU 메모리 정리
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                if retry_count > 0:
+                    logger.info(f"임베딩 생성 성공 - 재시도 {retry_count}회 후 배치 크기 {batch_size}로 성공")
+
+                return embeddings
+
+            except torch.cuda.OutOfMemoryError as e:
+                retry_count += 1
+                if retry_count > max_retries:
+                    logger.error(f"GPU 메모리 부족으로 최대 재시도 횟수 초과: {str(e)}")
+                    raise
+
+                # 배치 크기를 절반으로 줄임
+                batch_size = max(1, batch_size // 2)
+                logger.warning(f"GPU 메모리 부족 감지 - 배치 크기를 {batch_size}로 줄여서 재시도 ({retry_count}/{max_retries})")
+
+                # GPU 메모리 정리
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                continue
+
+            except Exception as e:
+                logger.error(f"Failed to encode texts with model {target_model}: {str(e)}")
+                # GPU 메모리 정리 (오류 시에도)
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                raise
 
     def calculate_similarity(self, texts: List[str], model_name: Optional[str] = None) -> np.ndarray:
         """Calculate similarity matrix between texts."""

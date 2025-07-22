@@ -445,7 +445,7 @@ class ChunkingService:
 
         return filtered_chunks
 
-    def chunk_text(self, text: str, strategy: str = "sentence", chunk_size: int = 512,
+    def chunk_text(self, text: str, strategy: str = "token", chunk_size: int = 512,
                    overlap: int = 50, language: str = "auto") -> List[Chunk]:
         """Main chunking method."""
         if not text.strip():
