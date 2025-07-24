@@ -24,6 +24,8 @@ share/python-wheels/
 MANIFEST
 sample_docs
 temp_processing
+test_outputs
+temp_test_output
 
 # PyInstaller
 *.manifest

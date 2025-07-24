@@ -3,6 +3,7 @@ Ragnaforge RAG 시스템 - 심플 Streamlit UI
 대시보드, 문서 색인, 검색 기능을 제공하는 간단한 인터페이스
 """
 
+import os
 import streamlit as st
 import requests
 import json
@@ -22,8 +23,8 @@ st.set_page_config(
 )
 
 # 전역 설정
-API_BASE_URL = "http://192.168.0.47:8000"
-DEFAULT_API_KEY = "sk-ragnaforge-v1-test-key-12345"
+API_BASE_URL = os.getenv("STREAMLIT_API_BASE_URL", "http://localhost:8000")
+DEFAULT_API_KEY = os.getenv("STREAMLIT_DEFAULT_API_KEY", "sk-ragnaforge-v1-test-key-12345")
 
 # 세션 상태 초기화
 if 'api_key' not in st.session_state:

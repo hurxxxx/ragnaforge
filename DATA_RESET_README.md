@@ -107,13 +107,13 @@ ragnaforge/
 
 ```env
 # Qdrant 설정
-QDRANT_HOST=49.247.14.153
+QDRANT_HOST=localhost
 QDRANT_PORT=6333
-QDRANT_API_KEY=your-api-key
+QDRANT_API_KEY=your-qdrant-api-key
 
 # MeiliSearch 설정
-MEILISEARCH_URL=http://49.247.14.153:7700/
-MEILISEARCH_API_KEY=your-api-key
+MEILISEARCH_URL=http://localhost:7700/
+MEILISEARCH_API_KEY=your-meilisearch-api-key
 
 # 스토리지 설정
 STORAGE_BASE_PATH=./data/storage

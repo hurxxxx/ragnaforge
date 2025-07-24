@@ -15,8 +15,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 설정
-API_BASE="http://127.0.0.1:8000"
-API_KEY="sk-kure-v1-test-key-12345"
+API_BASE="${API_BASE_URL:-http://127.0.0.1:8000}"
+API_KEY="${TEST_API_KEY:-sk-kure-v1-test-key-12345}"
 INVALID_API_KEY="invalid-key-123"
 
 # 테스트 결과 추적

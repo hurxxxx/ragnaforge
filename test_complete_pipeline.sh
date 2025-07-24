@@ -6,8 +6,8 @@
 set -e  # 오류 발생 시 스크립트 중단
 
 # 설정
-API_BASE="http://127.0.0.1:8000"
-API_KEY="sk-kure-v1-test-key-12345"
+API_BASE="${API_BASE_URL:-http://127.0.0.1:8000}"
+API_KEY="${TEST_API_KEY:-sk-kure-v1-test-key-12345}"
 TEST_FILE="sample_docs/lg_refrigerator_news.pdf"
 SEARCH_QUERY="LG 냉장고 가격"
 

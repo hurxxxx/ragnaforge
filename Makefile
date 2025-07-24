@@ -2,15 +2,16 @@
 
 help:
 	@echo "Available commands:"
-	@echo "  install     - Install dependencies"
-	@echo "  dev         - Run development server"
-	@echo "  test        - Run tests"
-	@echo "  lint        - Run linting"
-	@echo "  format      - Format code"
-	@echo "  clean       - Clean cache files"
-	@echo "  build       - Build Docker image"
-	@echo "  run         - Run with Docker Compose"
-	@echo "  stop        - Stop Docker Compose"
+	@echo "  install       - Install dependencies"
+	@echo "  dev           - Run development server"
+	@echo "  test          - Run comprehensive search tests"
+	@echo "  test-pipeline - Run complete pipeline test"
+	@echo "  lint          - Run linting"
+	@echo "  format        - Format code"
+	@echo "  clean         - Clean cache files"
+	@echo "  build         - Build Docker image"
+	@echo "  run           - Run with Docker Compose"
+	@echo "  stop          - Stop Docker Compose"
 
 install:
 	pip install -r requirements.txt
@@ -19,7 +20,7 @@ dev:
 	uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 test:
-	pytest test_api.py -v
+	./test_comprehensive_search_test.sh
 
 lint:
 	flake8 *.py
@@ -45,5 +46,5 @@ stop:
 logs:
 	docker-compose logs -f
 
-test-api:
-	python scripts/test_client.py
+test-pipeline:
+	./test_complete_pipeline.sh
