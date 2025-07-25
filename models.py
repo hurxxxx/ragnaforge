@@ -313,6 +313,52 @@ class ConversionComparisonResponse(BaseModel):
     comparison: Dict[str, Any] = Field(..., description="Performance comparison metrics")
 
 
+# Unified Document Conversion API Models
+class ConversionEngine(str, Enum):
+    """Available conversion engines."""
+    MARKER = "marker"
+    DOCLING = "docling"
+    AUTO = "auto"
+
+
+class UnifiedConversionResponse(BaseModel):
+    """Unified response for document conversion API."""
+
+    success: bool = Field(..., description="Whether conversion was successful")
+    engine_used: str = Field(..., description="Conversion engine used (marker/docling)")
+    conversion_time: float = Field(..., description="Time taken for conversion in seconds")
+    file_info: Dict[str, Any] = Field(..., description="Input file information")
+
+    # Content results
+    markdown_content: Optional[str] = Field(None, description="Generated markdown content")
+    content_length: Optional[int] = Field(None, description="Length of generated content")
+
+    # Metadata
+    document_metadata: Optional[Dict[str, Any]] = Field(None, description="Document metadata (title, pages, etc.)")
+
+    # Images (for marker)
+    images: Optional[List[Dict[str, Any]]] = Field(None, description="Extracted images information")
+    images_count: int = Field(0, description="Number of extracted images")
+
+    # Performance metrics
+    processing_stats: Dict[str, Any] = Field(..., description="Processing statistics")
+
+    # Error handling
+    error: Optional[str] = Field(None, description="Error message if conversion failed")
+    warnings: Optional[List[str]] = Field(None, description="Warning messages during conversion")
+
+
+class ImageInfo(BaseModel):
+    """Information about extracted images."""
+
+    filename: str = Field(..., description="Image filename")
+    format: str = Field(..., description="Image format (png, jpg, etc.)")
+    size_bytes: int = Field(..., description="Image size in bytes")
+    dimensions: Optional[Dict[str, int]] = Field(None, description="Image dimensions (width, height)")
+    page_number: Optional[int] = Field(None, description="Page number where image was found")
+    base64_data: Optional[str] = Field(None, description="Base64 encoded image data")
+
+
 # File Upload Models
 class SupportedFileType(str, Enum):
     """Supported file types for upload."""

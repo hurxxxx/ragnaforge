@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     max_text_length: int = 8192
 
     # Security
-    api_key: Optional[str] = None
+    api_key: Optional[str] = "sk-ragnaforge-v1-test-key-12345"  # Default test key for development
     cors_origins: List[str] = ["*"]
 
     # Logging

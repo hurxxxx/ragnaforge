@@ -18,6 +18,7 @@ from routers.files import router as files_router
 from routers.search import router as search_router
 from routers.admin import router as admin_router
 from routers.rerank import router as rerank_router
+from routers.convert import router as convert_router
 
 # Configure logging
 logging.basicConfig(
@@ -102,9 +103,57 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="Ragnaforge RAG API",
-    description="Korean-optimized RAG system with hybrid search and document intelligence",
+    description="""
+    🔥 **Ragnaforge** - Advanced RAG (Retrieval-Augmented Generation) API Server
+
+    A comprehensive document processing and search system with:
+
+    ## 🚀 Key Features
+    - **Multi-format Document Processing**: PDF, DOCX, PPTX, XLSX, MD, TXT
+    - **Advanced Text Chunking**: Multiple strategies (recursive, semantic, fixed)
+    - **Korean-Optimized Embeddings**: KURE-v1, KoE5 models
+    - **Hybrid Search**: Vector + Text search with reranking
+    - **OpenAI Compatible API**: Drop-in replacement for OpenAI embeddings
+    - **Unified Document Conversion**: Single API for Marker + Docling
+
+    ## 🔧 Technical Stack
+    - **Document Conversion**: Marker (PDF) + Docling (Multi-format)
+    - **Vector Database**: Qdrant
+    - **Text Search**: MeiliSearch
+    - **Embeddings**: Sentence Transformers (Korean models)
+    - **Reranking**: BGE reranker
+
+    ## 📚 API Categories
+    - **Document Conversion**: Unified API for document-to-markdown conversion
+    - **Embeddings**: OpenAI-compatible embedding generation
+    - **Files**: Document upload and processing pipeline
+    - **Search**: Vector, text, and hybrid search
+    - **Admin**: System management and monitoring
+    - **Rerank**: Result reranking and scoring
+
+    ## 🔗 Quick Start Examples
+
+    ### Convert Document to Markdown
+    ```bash
+    curl -X POST "http://localhost:8000/v1/convert/" \\
+      -H "Authorization: Bearer your-api-key" \\
+      -F "file=@document.pdf" \\
+      -F "engine=marker" \\
+      -F "extract_images=true"
+    ```
+
+    ### Generate Embeddings (OpenAI Compatible)
+    ```bash
+    curl -X POST "http://localhost:8000/embeddings" \\
+      -H "Authorization: Bearer your-api-key" \\
+      -H "Content-Type: application/json" \\
+      -d '{"input": ["Hello world"], "model": "nlpai-lab/KURE-v1"}'
+    ```
+    """,
     version=settings.app_version,
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
 # Add CORS middleware
@@ -142,6 +191,7 @@ app.include_router(files_router, tags=["Files"])
 app.include_router(search_router, tags=["Search"])
 app.include_router(admin_router, tags=["Admin"])
 app.include_router(rerank_router, tags=["Rerank"])
+app.include_router(convert_router, tags=["Document Conversion"])
 
 
 if __name__ == "__main__":
