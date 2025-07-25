@@ -42,6 +42,7 @@ class FileUploadService:
             '.pdf': SupportedFileType.PDF,
             '.docx': SupportedFileType.DOCX,
             '.pptx': SupportedFileType.PPTX,
+            '.xlsx': SupportedFileType.XLSX,
             '.txt': SupportedFileType.TXT,
             '.md': SupportedFileType.MD,
         }

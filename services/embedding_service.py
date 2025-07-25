@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from sentence_transformers import SentenceTransformer
 import torch
 import numpy as np
@@ -40,7 +40,11 @@ class EmbeddingService:
         }
 
     def load_model(self, model_name: str) -> SentenceTransformer:
-        """Load a model if not already loaded."""
+        """Load a model if not already loaded with enhanced safety checks."""
+        # Input validation
+        if not model_name or not model_name.strip():
+            raise ValueError("Model name cannot be empty")
+
         if model_name not in settings.available_models:
             raise ValueError(f"Model {model_name} not available. Available models: {settings.available_models}")
 
@@ -62,6 +66,19 @@ class EmbeddingService:
                     device=device
                 )
 
+                # Validate loaded model
+                if model is None:
+                    raise RuntimeError("Model loading returned None")
+
+                # Test model with a simple input to ensure it works
+                try:
+                    test_embedding = model.encode(["test"], convert_to_numpy=True, show_progress_bar=False)
+                    if test_embedding is None or len(test_embedding) == 0:
+                        raise RuntimeError("Model test encoding failed")
+                    logger.debug(f"Model validation successful - test embedding shape: {test_embedding.shape}")
+                except Exception as e:
+                    raise RuntimeError(f"Model validation failed: {e}")
+
                 # GPU 최적화 설정 적용
                 if device == "cuda":
                     model.to(device)
@@ -70,10 +87,24 @@ class EmbeddingService:
                     logger.info(f"GPU memory after loading: {torch.cuda.memory_allocated() / 1024**3:.2f}GB")
 
                 self._models[model_name] = model
-                logger.info(f"Successfully loaded model: {model_name} on {device}")
+                logger.info(f"Successfully loaded and validated model: {model_name} on {device}")
+
             except Exception as e:
                 logger.error(f"Failed to load model {model_name}: {str(e)}")
-                raise
+
+                # Clean up on failure
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                # Provide more specific error messages
+                if "No such file or directory" in str(e) or "not found" in str(e).lower():
+                    raise ValueError(f"Model {model_name} not found. Please check the model name.")
+                elif "CUDA out of memory" in str(e) or "out of memory" in str(e).lower():
+                    raise RuntimeError(f"Insufficient GPU memory to load model {model_name}")
+                elif "Connection" in str(e) or "timeout" in str(e).lower():
+                    raise RuntimeError(f"Network error loading model {model_name}. Please check internet connection.")
+                else:
+                    raise RuntimeError(f"Failed to load model {model_name}: {str(e)}")
 
         self._current_model = model_name
         return self._models[model_name]
@@ -90,12 +121,40 @@ class EmbeddingService:
 
     def encode_texts(self, texts: List[str], model_name: Optional[str] = None, batch_size: Optional[int] = None) -> np.ndarray:
         """Encode texts to embeddings with optimized batch processing and GPU memory management."""
+
+        # Enhanced input validation
+        if not texts:
+            return np.array([])
+
+        if not isinstance(texts, list):
+            raise ValueError("texts must be a list")
+
+        # Validate each text
+        for i, text in enumerate(texts):
+            if not isinstance(text, str):
+                raise ValueError(f"Text at index {i} must be a string, got {type(text).__name__}")
+            if len(text.strip()) == 0:
+                raise ValueError(f"Text at index {i} cannot be empty")
+            if len(text) > 50000:  # Conservative limit
+                raise ValueError(f"Text at index {i} is too long ({len(text)} characters)")
+
+        # Get model with validation
         model = self.get_model(model_name)
+        if model is None:
+            raise ValueError(f"Model not available: {model_name}")
+
         target_model = model_name or settings.default_model
 
         # 배치 크기 최적화
         if batch_size is None:
             batch_size = min(settings.optimal_batch_size, len(texts))
+
+        # Validate batch size
+        if batch_size <= 0:
+            raise ValueError(f"Invalid batch size: {batch_size}")
+        if batch_size > 1000:  # Reasonable upper limit
+            logger.warning(f"Large batch size {batch_size}, reducing to 1000")
+            batch_size = 1000
 
         # Handle KoE5 prefix requirement
         if target_model == "nlpai-lab/KoE5":
@@ -168,6 +227,71 @@ class EmbeddingService:
 
         return similarity_matrix
 
+    def count_tokens(self, text: str, model_name: Optional[str] = None) -> int:
+        """
+        Count tokens using the model's tokenizer.
+
+        Args:
+            text: Input text to count tokens for
+            model_name: Model name to use for tokenization
+
+        Returns:
+            Number of tokens
+        """
+        if not text:
+            return 0
+
+        try:
+            # Get the model and its tokenizer
+            model = self.get_model(model_name)
+            if model and hasattr(model, 'tokenizer'):
+                tokenizer = model.tokenizer
+
+                # Handle KoE5 prefix requirement for token counting too
+                target_model = model_name or settings.default_model
+                if target_model == "nlpai-lab/KoE5":
+                    text = f"query: {text}"
+
+                tokens = tokenizer.encode(text, add_special_tokens=True)
+                return len(tokens)
+        except Exception as e:
+            logger.warning(f"Model tokenizer failed for {model_name}: {e}, using approximation")
+
+        # Fallback to approximation
+        return self._approximate_token_count(text)
+
+    def count_tokens_batch(self, texts: List[str], model_name: Optional[str] = None) -> List[int]:
+        """Count tokens for a batch of texts."""
+        return [self.count_tokens(text, model_name) for text in texts]
+
+    def _approximate_token_count(self, text: str) -> int:
+        """
+        Approximate token counting using heuristics.
+
+        Based on analysis of Korean embedding models:
+        - Korean characters: ~2-3 characters per token
+        - English/numbers: ~4 characters per token
+        """
+        import re
+
+        # Remove extra whitespace
+        text = re.sub(r'\s+', ' ', text.strip())
+
+        # Count Korean characters (Hangul)
+        korean_chars = len(re.findall(r'[가-힣]', text))
+
+        # Count other characters (excluding spaces)
+        other_chars = len(text) - korean_chars - text.count(' ')
+
+        # Estimate tokens: Korean chars / 2.5, other chars / 4
+        korean_tokens = korean_chars / 2.5
+        other_tokens = other_chars / 4
+
+        # Add tokens for spaces (roughly 1 token per 4 spaces)
+        space_tokens = text.count(' ') / 4
+
+        return max(1, int(korean_tokens + other_tokens + space_tokens))
+
     def get_available_models(self) -> List[dict]:
         """Get list of available models."""
         return [
@@ -175,7 +299,8 @@ class EmbeddingService:
                 "id": model_id,
                 "object": "model",
                 "created": info["created"],
-                "owned_by": info["owned_by"]
+                "owned_by": info["owned_by"],
+                "description": info["description"]
             }
             for model_id, info in self._model_info.items()
             if model_id in settings.available_models
@@ -223,6 +348,40 @@ class EmbeddingService:
             if self._current_model == model_name:
                 self._current_model = None
             logger.info(f"Unloaded model: {model_name}")
+
+    def is_model_loaded(self, model_name: Optional[str] = None) -> bool:
+        """Check if a specific model is loaded."""
+        target_model = model_name or settings.default_model
+        return target_model in self._models and self._models[target_model] is not None
+
+    def validate_model_health(self, model_name: Optional[str] = None) -> bool:
+        """Validate that a model is healthy and working."""
+        try:
+            target_model = model_name or settings.default_model
+            if not self.is_model_loaded(target_model):
+                return False
+
+            # Test with a simple encoding
+            test_result = self.encode_texts(["health check"], target_model)
+            return test_result is not None and len(test_result) > 0
+
+        except Exception as e:
+            logger.warning(f"Model health check failed for {model_name}: {e}")
+            return False
+
+    def get_model_status(self) -> Dict[str, Any]:
+        """Get detailed status of all models."""
+        status = {
+            "loaded_models": list(self._models.keys()),
+            "current_model": self._current_model,
+            "available_models": settings.available_models,
+            "model_health": {}
+        }
+
+        for model_name in self._models.keys():
+            status["model_health"][model_name] = self.validate_model_health(model_name)
+
+        return status
 
 
 # Global embedding service instance

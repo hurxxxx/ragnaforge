@@ -27,11 +27,13 @@ class DocumentProcessingService:
         if method in ["marker", "docling"]:
             return method
 
-        # Auto selection logic - marker is now the default for all supported formats
-        if file_type in [SupportedFileType.PDF, SupportedFileType.DOCX, SupportedFileType.PPTX]:
-            return "marker"  # Marker supports PDF, DOCX, PPTX, XLSX, HTML, EPUB
+        # Auto selection logic - choose best engine for each format
+        if file_type == SupportedFileType.PDF:
+            return "marker"  # Marker excels at PDF conversion
+        elif file_type in [SupportedFileType.DOCX, SupportedFileType.PPTX, SupportedFileType.XLSX]:
+            return "docling"  # Docling has native Office document support
         else:
-            return "marker"  # Fallback to marker
+            return "docling"  # Fallback to docling for other formats
     
     def _read_text_file(self, file_path: Path) -> str:
         """Read content from text files."""
@@ -99,23 +101,32 @@ class DocumentProcessingService:
                         "method_used": method
                     }
             
-            elif file_type in [SupportedFileType.DOCX, SupportedFileType.PPTX]:
-                # Use marker or docling for Office documents based on method
+            elif file_type in [SupportedFileType.DOCX, SupportedFileType.PPTX, SupportedFileType.XLSX]:
+                # Office documents - use Docling (recommended) or fallback to Marker
                 logger.info(f"📄 Office 문서 변환 시작 - 방법: {method}")
-                if method == "marker":
-                    logger.info(f"🔄 Marker 서비스로 Office 문서 변환 중...")
-                    result = marker_service.convert_pdf_to_markdown(
-                        pdf_path=str(file_path),
-                        output_dir="temp_processing",
-                        extract_images=extract_images
-                    )
-                else:  # docling
+                if method == "docling" or method == "auto":
                     logger.info(f"🔄 Docling 서비스로 Office 문서 변환 중...")
-                    result = docling_service.convert_pdf_to_markdown(
-                        pdf_path=str(file_path),
-                        output_dir="temp_processing",
-                        extract_images=extract_images
+                    result = docling_service.convert_office_to_markdown(
+                        file_path=str(file_path),
+                        output_dir="temp_processing"
                     )
+                else:  # marker (fallback, but not ideal for Office docs)
+                    logger.warning(f"⚠️ Marker는 Office 문서에 최적화되지 않음. Docling 사용을 권장합니다.")
+                    logger.info(f"🔄 Marker 서비스로 Office 문서 변환 시도 중...")
+                    # Marker doesn't directly support Office docs, so this might fail
+                    try:
+                        result = marker_service.convert_pdf_to_markdown(
+                            pdf_path=str(file_path),
+                            output_dir="temp_processing",
+                            extract_images=extract_images
+                        )
+                    except Exception as e:
+                        logger.error(f"Marker로 Office 문서 변환 실패: {e}")
+                        logger.info("Docling으로 대체 시도...")
+                        result = docling_service.convert_office_to_markdown(
+                            file_path=str(file_path),
+                            output_dir="temp_processing"
+                        )
 
                 if result.get("success"):
                     return {

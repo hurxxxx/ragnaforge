@@ -6,53 +6,103 @@ from enum import Enum
 from config import settings
 
 
+# OpenAI API Error Models
+class OpenAIErrorType(str, Enum):
+    """OpenAI API error types."""
+    INVALID_REQUEST_ERROR = "invalid_request_error"
+    AUTHENTICATION_ERROR = "authentication_error"
+    PERMISSION_ERROR = "permission_error"
+    NOT_FOUND_ERROR = "not_found_error"
+    RATE_LIMIT_ERROR = "rate_limit_error"
+    API_ERROR = "api_error"
+    OVERLOADED_ERROR = "overloaded_error"
+
+
+class OpenAIError(BaseModel):
+    """OpenAI API error structure."""
+    message: str = Field(..., description="Error message")
+    type: OpenAIErrorType = Field(..., description="Error type")
+    param: Optional[str] = Field(None, description="Parameter that caused the error")
+    code: Optional[str] = Field(None, description="Error code")
+
+
+class OpenAIErrorResponse(BaseModel):
+    """OpenAI API error response."""
+    error: OpenAIError = Field(..., description="Error details")
+
+
 class EmbeddingRequest(BaseModel):
-    """Request model for embedding generation."""
+    """Request model for embedding generation - OpenAI API compatible."""
 
     input: Union[str, List[str]] = Field(
         ...,
         description="Text or list of texts to embed",
         examples=[["안녕하세요", "한국어 임베딩 모델입니다"]]
     )
-    model: Optional[str] = Field(
-        None,
+    model: str = Field(
+        ...,
         description="Model to use for embedding",
-        examples=["dragonkue/snowflake-arctic-embed-l-v2.0-ko"]
+        examples=["nlpai-lab/KURE-v1"]
     )
     encoding_format: Optional[str] = Field(
         "float",
         description="Encoding format for embeddings",
-        examples=["float"]
+        examples=["float", "base64"]
     )
     dimensions: Optional[int] = Field(
         None,
         description="Number of dimensions for the embedding",
-        examples=[768]
+        examples=[768],
+        ge=1
     )
     user: Optional[str] = Field(
         None,
         description="A unique identifier representing your end-user",
-        examples=["user-123"]
+        examples=["user-123"],
+        max_length=256
     )
 
     @field_validator('input')
     @classmethod
     def validate_input(cls, v):
+        from utils.openai_errors import batch_size_exceeded_error, context_length_exceeded_error
+
         if isinstance(v, str):
-            if len(v) > 8192:
-                raise ValueError("Text length exceeds maximum limit of 8192 characters")
-            return [v]
-        elif isinstance(v, list):
-            if len(v) > settings.max_batch_size:
-                raise ValueError(f"Batch size exceeds maximum limit of {settings.max_batch_size}")
-            for text in v:
-                if not isinstance(text, str):
-                    raise ValueError("All inputs must be strings")
-                if len(text) > 8192:
-                    raise ValueError("Text length exceeds maximum limit of 8192 characters")
-            return v
-        else:
+            v = [v]
+        elif not isinstance(v, list):
             raise ValueError("Input must be a string or list of strings")
+
+        # Check batch size limit (OpenAI limit: 2048)
+        if len(v) > 2048:
+            raise ValueError(f"Batch size cannot exceed 2048. You provided {len(v)} inputs.")
+
+        # Validate all inputs are strings
+        for i, text in enumerate(v):
+            if not isinstance(text, str):
+                raise ValueError(f"Input at index {i} must be a string")
+            if not text.strip():
+                raise ValueError(f"Input at index {i} cannot be empty")
+
+        # Basic length check (detailed token validation happens in the service)
+        for i, text in enumerate(v):
+            if len(text) > 32000:  # Conservative character limit
+                raise ValueError(f"Input at index {i} is too long. Maximum length is approximately 8192 tokens.")
+
+        return v
+
+    @field_validator('model')
+    @classmethod
+    def validate_model(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Model name cannot be empty")
+        return v
+
+    @field_validator('encoding_format')
+    @classmethod
+    def validate_encoding_format(cls, v):
+        if v and v not in ["float", "base64"]:
+            raise ValueError("encoding_format must be 'float' or 'base64'")
+        return v
 
 
 class EmbeddingData(BaseModel):
@@ -269,6 +319,7 @@ class SupportedFileType(str, Enum):
     PDF = "pdf"
     DOCX = "docx"
     PPTX = "pptx"
+    XLSX = "xlsx"
     TXT = "txt"
     MD = "md"
 
