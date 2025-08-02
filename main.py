@@ -186,12 +186,12 @@ async def ping():
 
 
 # Include routers
-app.include_router(embeddings_router, tags=["Embeddings"])
-app.include_router(files_router, tags=["Files"])
-app.include_router(search_router, tags=["Search"])
-app.include_router(admin_router, tags=["Admin"])
-app.include_router(rerank_router, tags=["Rerank"])
-app.include_router(convert_router, tags=["Document Conversion"])
+app.include_router(embeddings_router, prefix="/v1", tags=["Embeddings"])
+app.include_router(files_router, prefix="/v1", tags=["Files"])
+app.include_router(search_router, prefix="/v1", tags=["Search"])
+app.include_router(admin_router, prefix="/v1", tags=["Admin"])
+app.include_router(rerank_router, prefix="/v1", tags=["Rerank"])
+app.include_router(convert_router, prefix="/v1", tags=["Document Conversion"])
 
 
 if __name__ == "__main__":
